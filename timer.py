@@ -6,6 +6,7 @@ import socket
 # Plan: write application for interacting with a application on an embeded system (raspberry pi pico)
 # TODO: write C application to run on the raspberry pi pico
 # TODO: reverse engineer HTTP requests of elgato lights
+# TODO: add docstrings for all functions
 
 # architecture decision: from the perspective of the controller interface, 
 # lights might as well not exist as entities with more than a name + color
@@ -19,19 +20,27 @@ import socket
 def usage(exitCode: int) -> None:
     progname = os.path.basename(sys.argv[0])
     print(f"""Usage: {progname} [-h]
-          -h                    Print this message and exit
-          -a  TIME [LIGHTS]     Add new timer
-          -r  TIME              Remove timer
-          -p                    Print out all active timers
+          -h                                Print this message and exit
+          -a  TIME [LIGHTS] -o OPTIONS      Add new timer
+          -r  TIME                          Remove timer
+          -p                                Print out all active timers
+
+          TIME is HH:MM in 24 hour time
+          LIGHTS is a list of light names
+          OPTIONS is a list of integers: ON SATURATION HUE BRIGHTNESS
           """)
     exit(exitCode)
 
+def parseOptions(rawOptions: list) -> LightOptions:
+    
+    pass
 
-def addTimer(time: int, lights: list(Light), options: LightOptions, address: str) -> bool:
+def addTimer(time: int, lights: list, options: LightOptions, address: str) -> bool:
     # make an http request to the embedded system to add a new timer
+    lightRequest = ",".join(lights) # no idea what this actually is, will have to find out through testing
     requests.put(address, data={
         'add': time,
-        'lights': lights,
+        'lights': lightRequest,
         'options': options
     })
     return True
@@ -70,14 +79,22 @@ def main():
     while len(arguments) > 0:
         arg = arguments.pop(0)
         match arg:
-            case "-h":
+            case "-h": # help
                 usage(0)
-            case "-a":
+            case "-a": # add lights
                 if (address := findController() != ""):
                     time = arguments.pop(0) 
                     lights = []
-                    while (arguments[0][0] != '-'):
-                        lights.append(arguments.pop(0))
+                    rawOptions = []
+                    while popped := arguments.pop(0) != "-o": # add lights until the -o flag is hit
+                        lights.append(popped)
+                    while "-" not in (popped := arguments.pop(0)): # add lights until a new flag is hit
+                        if "-" in popped: # if we accidentally popped a flag, add it back
+                            arguments.insert(0, popped)
+                            break
+                        rawOptions.append(popped)
+                    options = parseOptions(rawOptions) # turn the raw options into a LightOptions object
+                    addTimer(time, lights, options, address)
             case "-r":
                 if address := findController() != "":
                     removeTimer(arguments.pop(0), address)
