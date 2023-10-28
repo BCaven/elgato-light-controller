@@ -1,4 +1,9 @@
-from lightStripController import Light, LightOptions
+#! usr/bin/python3
+"""
+
+
+"""
+
 import sys
 import os
 import requests
@@ -16,6 +21,21 @@ import socket
 # if all of the light data is even necessary
 
 
+"""
+HTTPS Request format:
+
+add/modify timer:
+body:
+light_name
+time_to_turn_on
+fade_time
+color
+
+NOTE: to get the list of the current timers and lights, just send an empty request
+
+
+
+"""
 
 def usage(exitCode: int) -> None:
     progname = os.path.basename(sys.argv[0])
@@ -31,32 +51,28 @@ def usage(exitCode: int) -> None:
           """)
     exit(exitCode)
 
-def parseOptions(rawOptions: list) -> LightOptions:
-    
-    pass
-
-def addTimer(time: int, lights: list, options: LightOptions, address: str) -> bool:
+def addTimer(controller_address: str, time: int, lights: list, color: str) -> bool:
     # make an http request to the embedded system to add a new timer
-    lightRequest = ",".join(lights) # no idea what this actually is, will have to find out through testing
-    requests.put(address, data={
+    lightRequest = ",".join(lights) # light names
+    requests.put(controller_address, data={
         'add': time,
         'lights': lightRequest,
         'options': options
     })
     return True
 
-def removeTimer(time: int, address) -> bool:
+def removeTimer(controller_address: str, time: int)  -> bool:
     # send request to remove a timer from the list
-    requests.put(address, data={
+    requests.put(controller_address, data={
         'remove': time
     })
     return True
 
-def printTimers(address) -> None:
+def printTimers(controller_address: str) -> None:
     # send request to address
-    requests.get(address)
+    message = requests.get(controller_address)
     # should get back a list of all active timers
-    pass
+    print(message)
 
 def findController() -> str: # find the controller
     # use mDNS
@@ -85,16 +101,16 @@ def main():
                 if (address := findController() != ""):
                     time = arguments.pop(0) 
                     lights = []
-                    rawOptions = []
+                    raw_options = []
                     while popped := arguments.pop(0) != "-o": # add lights until the -o flag is hit
                         lights.append(popped)
                     while "-" not in (popped := arguments.pop(0)): # add lights until a new flag is hit
                         if "-" in popped: # if we accidentally popped a flag, add it back
                             arguments.insert(0, popped)
                             break
-                        rawOptions.append(popped)
-                    options = parseOptions(rawOptions) # turn the raw options into a LightOptions object
-                    addTimer(time, lights, options, address)
+                        raw_options.append(popped)
+                    #options = parseOptions(rawOptions) # turn the raw options into a LightOptions object
+                    addTimer(address, time, lights, raw_options)
             case "-r":
                 if address := findController() != "":
                     removeTimer(arguments.pop(0), address)
@@ -103,3 +119,5 @@ def main():
                     printTimers(address)
             case _:
                 usage(1)
+if __name__ == "__main__":
+    main()
