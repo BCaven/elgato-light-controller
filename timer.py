@@ -21,29 +21,14 @@ import socket
 # if all of the light data is even necessary
 
 
-"""
-HTTPS Request format:
-
-add/modify timer:
-body:
-light_name
-time_to_turn_on
-fade_time
-color
-
-NOTE: to get the list of the current timers and lights, just send an empty request
-
-
-
-"""
-
 def usage(exitCode: int) -> None:
     progname = os.path.basename(sys.argv[0])
-    print(f"""Usage: {progname} [-h]
+    print(f"""Usage: {progname} [-harpc]
           -h                                Print this message and exit
           -a  TIME [LIGHTS] -o OPTIONS      Add new timer
           -r  TIME                          Remove timer
           -p                                Print out all active timers
+          -c  ADDRESS                       Manually set address of the light controller
 
           TIME is HH:MM in 24 hour time
           LIGHTS is a list of light names
@@ -54,16 +39,16 @@ def usage(exitCode: int) -> None:
 def addTimer(controller_address: str, time: int, lights: list, color: str) -> bool:
     # make an http request to the embedded system to add a new timer
     lightRequest = ",".join(lights) # light names
-    requests.put(controller_address, data={
+    response = requests.put(controller_address, data={
         'add': time,
         'lights': lightRequest,
-        'options': options
+        'color': color
     })
     return True
 
 def removeTimer(controller_address: str, time: int)  -> bool:
     # send request to remove a timer from the list
-    requests.put(controller_address, data={
+    response = requests.put(controller_address, data={
         'remove': time
     })
     return True
@@ -72,7 +57,7 @@ def printTimers(controller_address: str) -> None:
     # send request to address
     message = requests.get(controller_address)
     # should get back a list of all active timers
-    print(message)
+    print(message.text)
 
 def findController() -> str: # find the controller
     # use mDNS
