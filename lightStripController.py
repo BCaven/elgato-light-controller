@@ -1,67 +1,143 @@
-# Reference: github.com/zunderscore/elgato-light-control/
+"""
+controller for elgato light strips
 
-# Theory: lights are updated using http requests that are made to the light
-# http://{ip addr}:{port}/elgato/
-# stuff about the lights is found under /elgato/lights (this includes /lights/settings)
-# general info is under /elgato/accessory-info
+Reference: github.com/zunderscore/elgato-light-control/
+"""
 
-# TODO: check all light settings and reverse engineer http requests to update lights
+import requests
+import socket
+from multiprocessing import Pool
+import json
+from time import sleep
+NUM_PORTS = 65536
+ELGATO_PORT = 9123
 
-# TODO: consider refactoring how lights are seen and delt with
-# IDEA: perhaps just describe them as ip addresses/ports and only use the lightOptions stuff
-#   Pro: saves space and headache
-#   Con: technically ignores a lot of data, however, I do not know if this data is useful for internal project
-#   Compromise: add increased functionality as a future TODO item
+class ServiceListener:
+    def __init__(self):
+        self.services = []
+    def get_services(self):
+        return self.services
+    def remove_service(self, zeroconf, type, name):
+        print("Service %s removed" % (name,))
+    def update_service(self, zeroconf, type, name):
+        pass
+    def add_service(self, zeroconf, type, name):
+        info = zeroconf.get_service_info(type, name)
+        self.services.append(info)
 
+class LightStrip:
+    """
 
-class LightOptions:
-    def __init__(self, on: int, saturation: int, hue: int, brightness: int):
-        self.on = on
-        self.saturation = saturation
-        self.hue = hue
-        self.brightness = brightness
-
-class Light:
-    def __init__(self, ip: str, port: int, name:str):
-        self.ip = ip
+    """
+    def __init__(self, addr, port, name=""):
+        self.addr = addr
         self.port = port
         self.name = name
-        self.powerOnBehavior = 0
-        self.powerOnBrightness = 0
-        self.powerOnTemperature = 0
-        self.switchOnDurationMs = 0
-        self.switchOffDurationMs = 0
-        self.colorChangeDurationMs = 0
-        self.productName = ""
-        self.hardwareBoardType = 0
-        self.firmwareBuildNumber = 0
-        self.firmwareVersion = ""
-        self.serialNumber = ""
-        self.displayName = ""
-        self.features = []
-        self.numberOfLights = 0
-        self.options = []
+        self.full_addr = self.addr + ':' + str(self.port)
+        pass
 
-    def update_settings(self, options: LightOptions) -> None:
-        self.options = options
-        
+    def find_light_strips_zeroconf(service_type='_elg._tcp.local.', TIMEOUT=5):
+        """
+            Use multicast to find all elgato light strips
+            Parameters:
+                the service type to search
+                the timeout period to wait until you stop searching
+        """
+        # NOTE: need to put this in a try/except statement just in case they have not imported zeroconf
+        try:
+            import zeroconf
+        except Exception:
+            print("please install zeroconf to use this method")
+            print("$ pip install zeroconf")
+            return
+
+        lightstrips = []
+
+        print("attempting to find everything on", service_type)
+        zc = zeroconf.Zeroconf()
+        listener = ServiceListener()
+        browser = zeroconf.ServiceBrowser(zc, service_type, listener)
+        sleep(TIMEOUT) # this is not a rolling admission... I could rework it to be that way, and it might be smarter to do that
+        browser.cancel()
+        for service in listener.get_services():
+            print("name", service.get_name())
+            print("properties:", service.properties)
+            print("port", service.port)
+            for addr in service.addresses:
+                print("address:", socket.inet_ntoa(addr))
+            lightstrips.append(LightStrip(socket.inet_ntoa(addr), service.port, service.get_name()))
+
+        return lightstrips
 
 
-def find_lights() -> list(Light):
-    # when booting need to find all existing lights
-    # I think this means go through all of the ip addrs on the network and see which one is a light
-    # use nmap, same as method to find controller
+    def find_light_strips_manual(strips) -> list:
+        # oof we have to do it the hardcore way or just give up...
+        lightstrips = []
+        for (addr, port) in strips:
+            lightstrips.append(LightStrip(addr, port))
+        return lightstrips
 
-    # However, this might be unnecessary here
-    # should return a list of lights
-    pass
+    def __is_socket_open(tup):
+        addr, port = tup
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        try:
+            r = sock.connect_ex((addr, port))
+            if r == 0:
+                print("port:", port, "was open")
+                return port
+            else:
+                return 0
+                #print("port:", i, "was closed")
+        except Exception:
+            pass
 
-def update_light(light: Light, options: LightOptions) -> int:
-    # update one light
-    # this method wil only be used by the controller, 
-    pass
+    def check_all_ports(self, num_ports):
+        for port in range(num_ports):
+            yield LightStrip.__is_socket_open((self.addr, self.port))
 
-def update_lights(lights: list(Light)) -> int:
-    for light in lights:
-        update_light(light)
-    pass
+    def get_strip_data(self):
+        """
+            Send a get request to the full addr
+            format:
+            http://<IP>:<port>/elgato/lights
+        """
+        self.data = requests.get('http://' + self.full_addr + '/elgato/lights', verify=False).json()
+        return self.data
+
+    def get_strip_info(self):
+        """
+            Send a get request to the light
+            should get back something in this format:
+        """
+        self.info = requests.get('http://' + self.full_addr + '/elgato/accessory-info', verify=False).json()
+        return self.info
+
+    def get_strip_settings(self):
+        """
+
+        """
+        self.settings = requests.get('http://' + self.full_addr + '/elgato/lights/settings', verify=False).json()
+        return self.settings
+
+    def set_strip_data(self, new_data: json) -> bool:
+        """
+            Sends a put request to update the light data
+            Returns True if successful
+        """
+        r = requests.put('http://' + self.full_addr + '/elgato/lights', data=json.dumps(new_data))
+        # if the request was accepted, modify self.data
+        if r.status_code == requests.codes.ok:
+            self.data = r.json()
+            return True
+        return False
+
+    def update_color(self, on, hue, saturation, brightness):
+        """
+            User friendly way to interact with json data to change the color
+        """
+        self.data['lights'][0]['on'] = on
+        self.data['lights'][0]['hue'] = hue
+        self.data['lights'][0]['saturation'] = saturation
+        self.data['lights'][0]['brightness'] = brightness
+        return self.set_strip_data(self.data)
