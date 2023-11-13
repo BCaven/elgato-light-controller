@@ -59,20 +59,13 @@ def printTimers(controller_address: str) -> None:
     # should get back a list of all active timers
     print(message.text)
 
-def findController() -> str: # find the controller
-    # use mDNS
-    MCAST_GRP = '224.1.1.1'
-    MCAST_PORT = 5007
-    MULTICAST_TTL = 2
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.bind(MCAST_GRP, MCAST_PORT)
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, MULTICAST_TTL)
-    # send message out
-    sock.sendto(b'picolightcontroller', (MCAST_GRP, MCAST_PORT))
-    # listen for response
-    
-    # return the address of the controller
-    
+def findController(service_type='_elg._tcp.local.') -> str: # find the controller
+    try:
+        import zeroconf
+    except Exception:
+        print("please install zeroconf to use this method")
+        print("$ pip install zeroconf")
+        return ""
     return ""
 
 def main():
