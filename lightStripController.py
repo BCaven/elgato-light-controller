@@ -34,6 +34,23 @@ class Scene:
         """
 
         """
+        self.scenes = []
+
+    def add_scene(self, hue, saturation, brightness, durationMs, transitionMs):
+        """
+            add an item to the end of the list
+        """
+
+    def insert_scene(self, index, hue, saturation, brightness, durationMs, transitionMs):
+        """
+
+        """
+
+    def print_scenes(self):
+        """
+            Display every scene in the loop
+        """
+
         
 class LightStrip:
     """
@@ -222,3 +239,9 @@ class Room:
     def room_color(self, on, hue, saturation, brightness):
         for light in self.lights:
             light.update_color(on, hue, saturation, brightness)
+
+    def room_scene(self, scene):
+        """
+            Set all lights in the room to a specific scene
+
+        """
