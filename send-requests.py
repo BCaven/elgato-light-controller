@@ -8,9 +8,13 @@ def main():
     lightstrips = LightStrip.find_light_strips_zeroconf()
 
 
-    print(lightstrips[0].get_strip_data())
-    print(lightstrips[1].get_strip_data())
-
+    #print(lightstrips[0].get_strip_data())
+    #print(lightstrips[1].get_strip_data())
+    for light in lightstrips:
+        if light.is_scene:
+            light.scene.add_scene(100, 80, 100, 1000, 1000)
+            print(light.scene.print_scenes())
+            light.update_scene_data(light.scene)
 
 
     return

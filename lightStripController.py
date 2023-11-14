@@ -30,26 +30,31 @@ class Scene:
     """
         class to store and manipulate scenes at a high level
     """
-    def __init__(self):
+    def __init__(self, input_scene=[]):
         """
 
         """
-        self.scenes = []
+        self.data = input_scene
 
     def add_scene(self, hue, saturation, brightness, durationMs, transitionMs):
         """
             add an item to the end of the list
         """
+        self.data['scene'].append({'hue': hue, 'saturation': saturation, 'brightness': brightness, 'durationMs': durationMs, 'transitionMs': transitionMs})
 
     def insert_scene(self, index, hue, saturation, brightness, durationMs, transitionMs):
         """
 
         """
+        self.data['scene'].insert(index, {'hue': hue, 'saturation': saturation, 'brightness': brightness, 'durationMs': durationMs, 'transitionMs': transitionMs})
 
     def print_scenes(self):
         """
             Display every scene in the loop
         """
+        #print(self.data['scene'])
+        for scene in self.data['scene']:
+            print(scene)
 
         
 class LightStrip:
@@ -86,6 +91,10 @@ class LightStrip:
         self.get_strip_data() # fill in the data/info/settings of the light
         self.get_strip_info()
         self.get_strip_settings()
+        self.is_scene = False
+        if 'scene' in self.data['lights'][0]:
+            self.is_scene = True
+            self.scene = Scene(self.data['lights'][0])
 
     def find_light_strips_zeroconf(service_type='_elg._tcp.local.', TIMEOUT=5):
         """
@@ -223,6 +232,9 @@ class LightStrip:
         print("old setting:", self.settings['colorChangeDurationMs'])
         self.settings['colorChangeDurationMs'] = duration
         return self.set_strip_info(self.settings)
+
+    def update_scene_data(self, scene):
+        self.data['lights'][0]['scene'] = scene.data
 
 
 class Room:
