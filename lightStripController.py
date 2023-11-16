@@ -30,7 +30,7 @@ class Scene:
     """
         class to store and manipulate scenes at a high level
     """
-    def __init__(self, input_scene=[]):
+    def __init__(self, input_scene={}):
         """
 
         """
@@ -40,14 +40,12 @@ class Scene:
         """
             add an item to the end of the list
         """
-        self.data['scene'].append({'hue': hue, 'saturation': saturation, 'brightness': brightness, 'durationMs': durationMs, 'transitionMs': transitionMs})
-
+        self.data.append({'hue': hue, 'saturation': saturation, 'brightness': brightness, 'durationMs': durationMs, 'transitionMs': transitionMs})
     def insert_scene(self, index, hue, saturation, brightness, durationMs, transitionMs):
         """
 
         """
-        self.data['scene'].insert(index, {'hue': hue, 'saturation': saturation, 'brightness': brightness, 'durationMs': durationMs, 'transitionMs': transitionMs})
-
+        self.data.insert(index, {'hue': hue, 'saturation': saturation, 'brightness': brightness, 'durationMs': durationMs, 'transitionMs': transitionMs})
     def print_scenes(self):
         """
             Display every scene in the loop
@@ -87,14 +85,14 @@ class LightStrip:
         self.port = port
         self.name = name
         self.full_addr = self.addr + ':' + str(self.port)
-        print("full addr", self.full_addr)
+        #print("full addr", self.full_addr)
         self.get_strip_data() # fill in the data/info/settings of the light
         self.get_strip_info()
         self.get_strip_settings()
         self.is_scene = False
         if 'scene' in self.data['lights'][0]:
             self.is_scene = True
-            self.scene = Scene(self.data['lights'][0])
+            self.scene = Scene(self.data['lights'][0]['scene'])
 
     def find_light_strips_zeroconf(service_type='_elg._tcp.local.', TIMEOUT=5):
         """
@@ -113,7 +111,7 @@ class LightStrip:
 
         lightstrips = []
 
-        print("attempting to find everything on", service_type)
+        #print("attempting to find everything on", service_type)
         zc = zeroconf.Zeroconf()
         listener = ServiceListener()
         browser = zeroconf.ServiceBrowser(zc, service_type, listener)
@@ -121,11 +119,11 @@ class LightStrip:
         browser.cancel()    # however right now this works just fine. In theory it will lose connection to the lights if they get assigned to a new IP
                             # but in that case I am going to assume it is because the network bounces, which means this function will get called again anyways
         for service in listener.get_services():
-            print("name", service.get_name())
-            print("properties:", service.properties)
-            print("port", service.port)
+            #print("name", service.get_name())
+            #print("properties:", service.properties)
+            #print("port", service.port)
             for addr in service.addresses:
-                print("address:", socket.inet_ntoa(addr))
+                #print("address:", socket.inet_ntoa(addr))
                 lightstrips.append(LightStrip(socket.inet_ntoa(addr), service.port, service.get_name()))
 
         return lightstrips
@@ -206,10 +204,10 @@ class LightStrip:
             Returns True on success
         """
         r = requests.put('http://' + self.full_addr + '/elgato/lights/settings', data=json.dumps(new_data))
+        print(r.text)
         if r.status_code == requests.codes.ok:
             self.settings = new_data
             return True
-        print(r.text)
         return False
     def set_strip_info(self, new_data: json) -> bool:
         r = requests.put('http://' + self.full_addr + '/elgato/accessory-info', data=json.dumps(new_data))
@@ -235,6 +233,7 @@ class LightStrip:
 
     def update_scene_data(self, scene):
         self.data['lights'][0]['scene'] = scene.data
+        self.data['lights'][0]['numberOfSceneElements'] = len(scene.data)
 
 
 class Room:
