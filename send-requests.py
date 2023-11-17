@@ -18,6 +18,14 @@ def main():
             print("new data:\n", light.data)
             #light.scene.print_scenes()
             light.set_strip_data(light.data)
+        else:
+            light.make_scene('test-scene', 'test-scene-id', 100.0)
+            for i in range(4):
+                light.scene.add_scene(100, i * 30, 100, 1000, 1000)
+            light.update_scene_data(light.scene)
+            print("new data\n", light.data, sep="")
+            light.set_strip_data(light.data)
+
 
 
     return

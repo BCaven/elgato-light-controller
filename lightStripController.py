@@ -29,8 +29,21 @@ class ServiceListener:
 class Scene:
     """
         class to store and manipulate scenes at a high level
+            {
+                'numberOfLights': 1,
+                'lights': [
+                    {'on': 1,
+                     'id': 'com.corsair.cc.scene.sunrise',
+                     'name': 'Sunrise',
+                     'brightness': 100.0,
+                     'numberOfSceneElements': 4,
+                     'scene': []
+                     }
+                ]
+            }
+
     """
-    def __init__(self, input_scene={}):
+    def __init__(self, input_scene=[]):
         """
 
         """
@@ -235,6 +248,21 @@ class LightStrip:
         self.data['lights'][0]['scene'] = scene.data
         self.data['lights'][0]['numberOfSceneElements'] = len(scene.data)
 
+    def make_scene(self, name: str, scene_id: str, brightness: float):
+        self.data = {
+            'numberOfLights': 1,
+            'lights': [
+                {'on': 1,
+                 'id': scene_id,
+                 'name': name,
+                 'brightness': brightness,
+                 'numberOfSceneElements': 0,
+                 'scene': []
+                 }
+            ]
+        }
+        self.is_scene = True
+        self.scene = Scene()
 
 class Room:
     """
