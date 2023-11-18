@@ -59,6 +59,10 @@ class Scene:
 
         """
         self.data.insert(index, {'hue': hue, 'saturation': saturation, 'brightness': brightness, 'durationMs': durationMs, 'transitionMs': transitionMs})
+
+    def delete_scene(self, index=0):
+        return self.data.pop(index)
+
     def print_scenes(self):
         """
             Display every scene in the loop
@@ -67,6 +71,12 @@ class Scene:
         for scene in self.data['scene']:
             print(scene)
 
+    def length(self):
+        scene_length = 0
+        for scene in self.data['scene']:
+            scene_length += scene['durationMs']
+            scene_length += scene['transitionMs']
+        return scene_length
         
 class LightStrip:
     """
