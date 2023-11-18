@@ -274,6 +274,18 @@ class LightStrip:
         self.is_scene = True
         self.scene = Scene()
 
+    def transition(colors: list):
+        """
+            TODO: write this function
+
+        needs to make a scene that transitions between these two colors
+        once the scene has looped through once, change the color to be the desired end color
+        """
+        # add every color in colors to a temp scene
+        # update the light with the new scene
+        # wait until the scene has been completed
+        # set the light to the end color
+
 class Room:
     """
         Collection of lights that are on the same network
