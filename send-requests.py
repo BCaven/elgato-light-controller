@@ -8,8 +8,23 @@ def main():
     lightstrips = LightStrip.find_light_strips_zeroconf()
 
 
-    #print(lightstrips[0].get_strip_data())
     #print(lightstrips[1].get_strip_data())
+    #return
+    transition = [ # NOTE: these are the normal yellow/reds
+        (34.0, 69.0, 100, 1000, 5000),
+        #(26.0, 98.0, 100, 0, 1000),
+        (1.0, 85.0, 100, 0, 5000),
+        (1.0, 85.0, 0, 1000, 5000)
+
+    ]
+    for light in lightstrips:
+        light.transition(transition)
+
+    #sleep(5)
+    for light in lightstrips:
+        light.update_color(1, 34.0, 69.0, 100)
+    return
+
     for light in lightstrips:
         if light.is_scene:
             print(light.data)

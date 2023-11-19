@@ -68,7 +68,7 @@ class Scene:
             Display every scene in the loop
         """
         #print(self.data['scene'])
-        for scene in self.data['scene']:
+        for scene in self.data:
             print(scene)
 
     def length(self):
@@ -244,10 +244,15 @@ class LightStrip:
         """
             User friendly way to interact with json data to change the color
         """
-        self.data['lights'][0]['on'] = on
-        self.data['lights'][0]['hue'] = hue
-        self.data['lights'][0]['saturation'] = saturation
-        self.data['lights'][0]['brightness'] = brightness
+        self.data = {
+            'numberOfLights': 1,
+            'lights': [
+                {'on': on,
+                 'hue': hue,
+                 'saturation': saturation,
+                 'brightness': brightness}
+            ]
+        }
         return self.set_strip_data(self.data)
 
     def update_scene_data(self, scene):
@@ -272,8 +277,8 @@ class LightStrip:
 
     def transition(self, colors: list, name='transition-scene', scene_id='transition-scene-id'):
         """
-            TODO: write this function
-
+            TODO: make this work asyncronously
+            TODO: fix subsequent scenes having the transition from the previous light
         needs to make a scene that transitions between these two colors
         once the scene has looped through once, change the color to be the desired end color
         """
@@ -282,13 +287,16 @@ class LightStrip:
         wait_time_ms = 0
         for color in colors:
             hue, saturation, brightness, durationMs, transitionMs = color
+            #print(hue, saturation, brightness, durationMs, transitionMs)
             self.scene.add_scene(hue, saturation, brightness, durationMs, transitionMs)
-            wait_time += durationMs + transitionMs
+            wait_time_ms += durationMs + transitionMs
         # update the light with the new scene
+        print("transition scene:")
         self.update_scene_data(self.scene)
+        print(self.data)
         self.set_strip_data(self.data)
         # wait until the scene has been completed
-        sleep(wait_time_ms / 1000)
+        sleep( (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000)
         # set the light to the end color
         is_on = 1 if colors[-1][2] > 0 else 0
         self.update_color(is_on, colors[-1][0], colors[-1][1], colors[-1][2])
