@@ -249,16 +249,12 @@ class LightStrip:
         self.data['lights'][0]['saturation'] = saturation
         self.data['lights'][0]['brightness'] = brightness
         return self.set_strip_data(self.data)
-    def update_color_change_duration(self, duration):
-        print("old setting:", self.settings['colorChangeDurationMs'])
-        self.settings['colorChangeDurationMs'] = duration
-        return self.set_strip_info(self.settings)
 
     def update_scene_data(self, scene):
         self.data['lights'][0]['scene'] = scene.data
         self.data['lights'][0]['numberOfSceneElements'] = len(scene.data)
 
-    def make_scene(self, name: str, scene_id: str, brightness: float):
+    def make_scene(self, name: str, scene_id: str, brightness:float = 100.0):
         self.data = {
             'numberOfLights': 1,
             'lights': [
@@ -274,7 +270,7 @@ class LightStrip:
         self.is_scene = True
         self.scene = Scene()
 
-    def transition(colors: list):
+    def transition(self, colors: list, name='transition-scene', scene_id='transition-scene-id'):
         """
             TODO: write this function
 
@@ -282,9 +278,20 @@ class LightStrip:
         once the scene has looped through once, change the color to be the desired end color
         """
         # add every color in colors to a temp scene
+        self.make_scene(name, scene_id)
+        wait_time_ms = 0
+        for color in colors:
+            hue, saturation, brightness, durationMs, transitionMs = color
+            self.scene.add_scene(hue, saturation, brightness, durationMs, transitionMs)
+            wait_time += durationMs + transitionMs
         # update the light with the new scene
+        self.update_scene_data(self.scene)
+        self.set_strip_data(self.data)
         # wait until the scene has been completed
+        sleep(wait_time_ms / 1000)
         # set the light to the end color
+        is_on = 1 if colors[-1][2] > 0 else 0
+        self.update_color(is_on, colors[-1][0], colors[-1][1], colors[-1][2])
 
 class Room:
     """
