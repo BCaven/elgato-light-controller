@@ -8,7 +8,7 @@ import requests
 import socket
 from multiprocessing import Pool
 import json
-from time import sleep
+from time import sleep, time
 
 NUM_PORTS = 65536
 ELGATO_PORT = 9123
@@ -275,7 +275,7 @@ class LightStrip:
         self.is_scene = True
         self.scene = Scene()
 
-    def transition(self, colors: list, name='transition-scene', scene_id='transition-scene-id'):
+    def transition_blocking(self, colors: list, name='transition-scene', scene_id='transition-scene-id'):
         """
             TODO: make this work asyncronously
             TODO: fix subsequent scenes having the transition from the previous light
@@ -301,15 +301,45 @@ class LightStrip:
         is_on = 1 if colors[-1][2] > 0 else 0
         self.update_color(is_on, colors[-1][0], colors[-1][1], colors[-1][2])
 
+    def transition_start(self, colors: list, name='transition-scene', scene_id='transition-scene-id') -> int:
+        """
+            Non-blocking for running multiple scenes
+            returns how long to wait
+
+        """
+        self.make_scene(name, scene_id)
+        wait_time_ms = 0
+        for color in colors:
+            hue, saturation, brightness, durationMs, transitionMs = color
+            #print(hue, saturation, brightness, durationMs, transitionMs)
+            self.scene.add_scene(hue, saturation, brightness, durationMs, transitionMs)
+            wait_time_ms += durationMs + transitionMs
+        # update the light with the new scene
+        print("transition scene:")
+        self.update_scene_data(self.scene)
+        print(self.data)
+        self.set_strip_data(self.data)
+        # return the wait time
+        return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
+
+    def transition_end(self, end_color: tuple[float, float, float]):
+        """
+            used after transition_start is called
+            sets the scene to the end_color
+            almost identical to lightStrip.update_color - primarily used to keep code readable
+        """
+        is_on = 1 if end_color[2] > 0 else 0
+        self.update_color(is_on, end_color[0], end_color[1], end_color[2])
+
 class Room:
     """
         Collection of lights that are on the same network
 
     """
-    def __init__():
-        self.lights = []
+    def __init__(self, lights:list=[]):
+        self.lights = lights
 
-    def setup(service_type='_elg._tcp.local.', timeout=5):
+    def setup(self, service_type='_elg._tcp.local.', timeout=5):
         self.lights = LightStrip.find_light_strips_zeroconf(service_type, timeout)
 
     def room_color(self, on, hue, saturation, brightness):
@@ -321,3 +351,18 @@ class Room:
             Set all lights in the room to a specific scene
 
         """
+
+    def room_transition(self, colors:list, name='transition-scene', scene_id='transition-scene-id'):
+        """
+            Non blocking transition for all room lights
+        """
+        times = []
+        for light in self.lights:
+            times.append((light, light.transition_start(colors, name, scene_id), time()))
+
+        while times:
+            light, sleep_time, start_time = times.pop(0)
+            if sleep_time + start_time < time():
+                light.transition_end(colors[-1])
+            else:
+                times.append((light, sleep_time, start_time))
