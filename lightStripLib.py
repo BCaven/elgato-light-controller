@@ -277,7 +277,6 @@ class LightStrip:
 
     def transition_blocking(self, colors: list, name='transition-scene', scene_id='transition-scene-id'):
         """
-            TODO: make this work asyncronously
             TODO: fix subsequent scenes having the transition from the previous light
         needs to make a scene that transitions between these two colors
         once the scene has looped through once, change the color to be the desired end color
@@ -305,7 +304,8 @@ class LightStrip:
         """
             Non-blocking for running multiple scenes
             returns how long to wait
-
+            BUG: subsequent lights have the elements of the scene from the previous light
+                however, they still transition correctly which is strange
         """
         self.make_scene(name, scene_id)
         wait_time_ms = 0

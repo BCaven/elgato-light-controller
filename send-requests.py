@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from lightStripController import LightStrip, Room
+from lightStripLib import LightStrip, Room
 from time import sleep
 def main():
     """
