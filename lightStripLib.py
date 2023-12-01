@@ -203,11 +203,14 @@ class LightStrip:
         return self.settings
     def get_strip_color(self):
         """
-
+            Return the color of the light
+            If the light is not set to a specific color (i.e. when it is in a scene) then the tuple is empty
         """
-        light_color = self.get_strip_data()['lights'][0]
-        return (light_color['on'], light_color['hue'], light_color['saturation'], light_color['brightness'])
-
+        try:
+            light_color = self.get_strip_data()['lights'][0]
+            return (light_color['on'], light_color['hue'], light_color['saturation'], light_color['brightness'])
+        except Exception:
+            return () # the light strip is not set to a static color
 
     def set_strip_data(self, new_data: json) -> bool:
         """
@@ -309,6 +312,12 @@ class LightStrip:
         """
         self.make_scene(name, scene_id)
         wait_time_ms = 0
+        # check if the light has already been set to a color, and if it has, make that color the start of the transition scene
+        if current_color := self.get_strip_color():
+            _, hue, saturation, brightness = current_color
+            self.scene.add_scene(hue, saturation, brightness, colors[0][3], colors[0][4])
+            wait_time_ms += colors[0][4] + colors[0][3]
+        # add the colors in the new scene
         for color in colors:
             hue, saturation, brightness, durationMs, transitionMs = color
             #print(hue, saturation, brightness, durationMs, transitionMs)
