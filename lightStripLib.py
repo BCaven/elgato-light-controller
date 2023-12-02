@@ -77,7 +77,25 @@ class Scene:
             scene_length += scene['durationMs']
             scene_length += scene['transitionMs']
         return scene_length
-        
+
+def save_timer_to_file(file: str, time: str, lights: list, scene: list):
+    """
+        Save a timer in file so the controller can read it in
+
+        Format: TIME, LIGHT|LIGHT|etc, SCENE, SCENE, SCENE, etc
+        TIME    = HHMM
+        LIGHT   = ip addr : port
+        SCENE   = HUE|SATURATION|BRIGHTNESS|DURATION_MS|TRANSITION_MS
+
+    """
+    with open(file, 'a') as output_file:
+        output_list = [time, "|".join(lights)]
+        for item in scene:
+            output_list.append("|".join(str(s) for s in item))
+        output_str = ",".join(output_list) + "\n"
+        output_file.write(output_str)
+
+
 class LightStrip:
     """
         LightStrip language
