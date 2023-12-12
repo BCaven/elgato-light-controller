@@ -385,7 +385,24 @@ class Room:
         """
         times = []
         for light in self.lights:
-            times.append((light, light.transition_start(colors, name, scene_id), time()))
+            t = light.transition_start(colors, name, scene_id)
+            times.append((light, t, time()))
+
+        while times:
+            light, sleep_time, start_time = times.pop(0)
+            if sleep_time + start_time < time():
+                light.transition_end(colors[-1])
+            else:
+                times.append((light, sleep_time, start_time))
+
+    def light_transition(self, addr:str, colors:list, name='transition-scene', scene_id='transition-scene-id'):
+        """
+            Non blocking transition for specific light in the room
+        """
+        times = []
+        for light in self.lights:
+            if light.addr == addr:
+                times.append((light, light.transition_start(colors, name, scene_id), time()))
 
         while times:
             light, sleep_time, start_time = times.pop(0)
