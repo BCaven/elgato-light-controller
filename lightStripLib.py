@@ -368,7 +368,7 @@ class Room:
 
     def setup(self, service_type='_elg._tcp.local.', timeout=5):
         self.lights = LightStrip.find_light_strips_zeroconf(service_type, timeout)
-
+        return True if self.lights else False
     def room_color(self, on, hue, saturation, brightness):
         for light in self.lights:
             light.update_color(on, hue, saturation, brightness)

@@ -8,12 +8,12 @@ Timers are stored in the file pointed to by LIGHT_TIMERS
 Use cron or equivalent to have this program automatically run at startup
 """
 from lightStripLib import Room
-from datetime import datetime, timedelta
+from datetime import datetime
 from time import sleep
 import sys
 import subprocess
 
-TIMER_FILE="demo.transition" #"light_timers.csv"
+TIMER_FILE="light.transition" #"light_timers.csv"
 
 
 
@@ -82,8 +82,9 @@ def main():
     timers = get_timers(TIMER_FILE)   # get all the timers
     # TODO: sort the timers so the earliest timer is first and the latest timer is last
     room = Room()
-    room.setup()            # get all the lights
-
+    if not room.setup():            # get all the lights
+        sys.exit(1)
+        
     print(timers)
 
     while True: # make sure the timer never stops running
