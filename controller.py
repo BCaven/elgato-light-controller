@@ -92,6 +92,13 @@ def main():
             # if there are no timers, we are just going to stop the program
             sys.exit(1)
         current_time = int(datetime.now().strftime('%H%M'))
+        if current_time % 5 == 0:
+            print(f"{current_time} - timers: {len(timers)}")
+            for t in timers:
+                time, transition, activated, lights = t
+                print(f"\t{time} : {"done" if activated else "waiting"}")
+
+
         for index, timer in enumerate(timers):
             time, transition, activated, lights = timer
             if abs(current_time - time) <= 1 and not activated:
@@ -107,7 +114,7 @@ def main():
                 activated = True # set the timer to activated
             elif current_time <= 1:
                 activated = False
-                
+
             timers[index] = (time, transition, activated, lights)
         sleep(60) # wait a minute
 
@@ -116,7 +123,7 @@ def main():
             ['md5sum', TIMER_FILE.encode('utf-8')], 
             stdout=subprocess.PIPE).stdout.decode('utf-8')
         if current_hash != new_hash:
-            print("checking for timers")
+            print("checking for timers because timer file got modified")
             timers = get_timers(TIMER_FILE)
         
         current_hash = new_hash
