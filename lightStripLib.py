@@ -294,16 +294,15 @@ class LightStrip:
             ]
         }
         self.is_scene = True
-        self.scene = Scene()
+        self.scene = Scene([]) # if you do not specify an empty scene, it might copy old scene data... annoying
 
     def transition_start(self, colors: list, name='transition-scene', scene_id='transition-scene-id') -> int:
         """
             Non-blocking for running multiple scenes
             returns how long to wait
-            BUG: subsequent lights have the elements of the scene from the previous light
-                however, they still transition correctly which is strange
+            
         """
-        self.make_scene(name, scene_id)
+        self.make_scene(name, scene_id, 100)
         wait_time_ms = 0
         # check if the light has already been set to a color, and if it has, make that color the start of the transition scene
         if current_color := self.get_strip_color():
@@ -315,12 +314,13 @@ class LightStrip:
             hue, saturation, brightness, durationMs, transitionMs = color
             #print(hue, saturation, brightness, durationMs, transitionMs)
             self.scene.add_scene(hue, saturation, brightness, durationMs, transitionMs)
-            wait_time_ms += durationMs + transitionMs
+            wait_time_ms += durationMs + transitionMs        
+        
         # update the light with the new scene
-        print("transition scene:")
         self.update_scene_data(self.scene)
-        print(self.data)
         self.set_strip_data(self.data)
+        #print("new data:")
+        #print(self.data)
         # return the wait time
         return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
 

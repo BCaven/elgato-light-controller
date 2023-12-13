@@ -5,8 +5,8 @@ def main():
     """
 
     """
-    #room = Room()
-    #room.setup()
+    room = Room()
+    room.setup()
 
     transition = [ # NOTE: these are the normal yellow/reds
         #(34.0, 69.0, 100, 1000, 5000),
@@ -16,8 +16,8 @@ def main():
         (34.0, 69.0, 100, 1000, 5000)
 
     ]
-    save_timer_to_file("demo.transition", "2030", ["192.168.86.23:5123"], transition)
-    #room.room_transition(transition)
+    #save_timer_to_file("demo.transition", "2030", ["192.168.86.23:5123"], transition)
+    room.room_transition(transition)
 
 if __name__ == "__main__":
     main()
