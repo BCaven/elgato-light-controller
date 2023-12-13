@@ -96,7 +96,7 @@ def main():
             print(f"{current_time} - timers: {len(timers)}")
             for t in timers:
                 time, transition, activated, lights = t
-                print(f"\t{time} : {"done" if activated else "waiting"}")
+                print(f"\t{time} : {'done' if activated else 'waiting'}")
 
 
         for index, timer in enumerate(timers):
