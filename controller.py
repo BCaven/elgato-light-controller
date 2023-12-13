@@ -106,9 +106,9 @@ def main():
                     room.room_transition(transition)
                 activated = True # set the timer to activated
             elif current_time <= 1:
-                timers[index][2] = False
-            current_timer = (time, transition, activated, lights)
-            timers[index] = current_timer
+                activated = False
+                
+            timers[index] = (time, transition, activated, lights)
         sleep(60) # wait a minute
 
         # check for any new timers only if the timer file has changed

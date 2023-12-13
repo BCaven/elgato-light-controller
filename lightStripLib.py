@@ -296,31 +296,6 @@ class LightStrip:
         self.is_scene = True
         self.scene = Scene()
 
-    def transition_blocking(self, colors: list, name='transition-scene', scene_id='transition-scene-id'):
-        """
-            TODO: fix subsequent scenes having the transition from the previous light
-        needs to make a scene that transitions between these two colors
-        once the scene has looped through once, change the color to be the desired end color
-        """
-        # add every color in colors to a temp scene
-        self.make_scene(name, scene_id)
-        wait_time_ms = 0
-        for color in colors:
-            hue, saturation, brightness, durationMs, transitionMs = color
-            #print(hue, saturation, brightness, durationMs, transitionMs)
-            self.scene.add_scene(hue, saturation, brightness, durationMs, transitionMs)
-            wait_time_ms += durationMs + transitionMs
-        # update the light with the new scene
-        print("transition scene:")
-        self.update_scene_data(self.scene)
-        print(self.data)
-        self.set_strip_data(self.data)
-        # wait until the scene has been completed
-        sleep( (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000)
-        # set the light to the end color
-        is_on = 1 if colors[-1][2] > 0 else 0
-        self.update_color(is_on, colors[-1][0], colors[-1][1], colors[-1][2])
-
     def transition_start(self, colors: list, name='transition-scene', scene_id='transition-scene-id') -> int:
         """
             Non-blocking for running multiple scenes
