@@ -165,7 +165,10 @@ class LightStrip:
             #print("port", service.port)
             for addr in service.addresses:
                 #print("address:", socket.inet_ntoa(addr))
-                lightstrips.append(LightStrip(socket.inet_ntoa(addr), service.port, service.get_name()))
+                prospect_light = LightStrip(socket.inet_ntoa(addr), service.port, service.get_name())
+                # TODO add support for Key Lights
+                if 'Strip' in prospect_light.info['productName']:
+                    lightstrips.append(prospect_light)
 
         return lightstrips
 
