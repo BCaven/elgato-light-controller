@@ -237,6 +237,8 @@ class LightStrip:
         """
             Sends a put request to update the light data
             Returns True if successful
+
+            TODO: investigate if sending the entire JSON is necessary or if we can just send the things that need to be changed
         """
         r = requests.put('http://' + self.full_addr + '/elgato/lights', data=json.dumps(new_data))
         # if the request was accepted, modify self.data
@@ -296,14 +298,26 @@ class LightStrip:
                  }
             ]
         }
+        # if you do not specify an empty scene, it might copy old scene data... annoying
         self.is_scene = True
-        self.scene = Scene([]) # if you do not specify an empty scene, it might copy old scene data... annoying
+        self.scene = Scene([])
 
-    def transition_start(self, colors: list, name='transition-scene', scene_id='transition-scene-id') -> int:
+    def transition_start(self,
+                         colors: list,
+                         name='transition-scene',
+                         scene_id='transition-scene-id',
+                         ) -> int:
         """
-            Non-blocking for running multiple scenes
-            returns how long to wait
-            
+        Non-blocking for running multiple scenes.
+
+        returns how long to wait
+
+        TODO: add ability to transition to a new scene
+
+        TODO: see if scenes are callable by name
+        TODO: make asyncronous function to replace this one
+
+        TODO: see if you can pick a different way to cycle between colors in a scene
         """
         self.make_scene(name, scene_id, 100)
         wait_time_ms = 0
@@ -315,26 +329,44 @@ class LightStrip:
         # add the colors in the new scene
         for color in colors:
             hue, saturation, brightness, durationMs, transitionMs = color
-            #print(hue, saturation, brightness, durationMs, transitionMs)
             self.scene.add_scene(hue, saturation, brightness, durationMs, transitionMs)
-            wait_time_ms += durationMs + transitionMs        
-        
+            wait_time_ms += durationMs + transitionMs
+
         # update the light with the new scene
         self.update_scene_data(self.scene)
         self.set_strip_data(self.data)
-        #print("new data:")
-        #print(self.data)
         # return the wait time
         return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
 
-    def transition_end(self, end_color: tuple[float, float, float]):
+    def transition_end(self,
+                       end_scene: list,
+                       end_scene_name='end-scene',
+                       end_scene_id='end-scene-id'):
         """
-            used after transition_start is called
-            sets the scene to the end_color
-            almost identical to lightStrip.update_color - primarily used to keep code readable
+        End the transition scene and replace it with a new scene.
+
+        used after transition_start is called
+        sets the scene to the end_color
+        almost identical to lightStrip.update_color - primarily used to keep code readable
         """
-        is_on = 1 if end_color[2] > 0 else 0
-        self.update_color(is_on, end_color[0], end_color[1], end_color[2])
+        if not end_scene:
+            # oh no, you did an invalid input
+            print("missing end scene")
+            return
+        if len(end_scene) > 1:
+            hue, saturation, brightness, _, _ = end_scene[0]
+            is_on = 1 if brightness > 0 else 0
+            self.update_color(is_on, hue, saturation, brightness)
+
+            pass
+        else:
+            # the end scene is an actual scene
+            # TODO: make scene brightness variable
+            self.make_scene(end_scene_name, end_scene_id, 100)
+            self.scene = Scene(end_scene)
+            self.update_scene_data(self.scene)
+            self.set_strip_data(self.data)
+
 
 class Room:
     """
@@ -353,38 +385,67 @@ class Room:
 
     def room_scene(self, scene):
         """
-            Set all lights in the room to a specific scene
+        Set all lights in the room to a specific scene.
+
+        TODO: write this method
 
         """
 
-    def room_transition(self, colors:list, name='transition-scene', scene_id='transition-scene-id'):
-        """
-            Non blocking transition for all room lights
-        """
+    def room_transition(self,
+                        colors: list,
+                        name='transition-scene',
+                        scene_id='transition-scene-id',
+                        end_scene: list = [],
+                        end_scene_name="end-scene",
+                        end_scene_id="end-scene-id"):
+        """Non blocking transition for all room lights."""
+        if not colors:
+            print("cannot transition an empty scene")
+            return
+        if not end_scene:
+            end_scene = colors[-1]
+
         times = []
         for light in self.lights:
-            t = light.transition_start(colors, name, scene_id)
-            times.append((light, t, time()))
+            times.append((
+                light,
+                light.transition_start(colors, name, scene_id),
+                time()))
 
         while times:
+            # TODO: check if this can be optimized to use less
             light, sleep_time, start_time = times.pop(0)
             if sleep_time + start_time < time():
-                light.transition_end(colors[-1])
+                light.transition_end(end_scene, end_scene_name, end_scene_id)
             else:
                 times.append((light, sleep_time, start_time))
 
-    def light_transition(self, addr:str, colors:list, name='transition-scene', scene_id='transition-scene-id'):
-        """
-            Non blocking transition for specific light in the room
-        """
+    def light_transition(self,
+                         addr: str,
+                         colors: list,
+                         name='transition-scene',
+                         scene_id='transition-scene-id',
+                         end_scene: list = [],
+                         end_scene_name="end-scene",
+                         end_scene_id="end-scene-id"):
+        """Non blocking transition for specific light in the room."""
+        if not colors:
+            print("cannot transition an empty scene")
+            return
+        if not end_scene:
+            end_scene = colors[-1]
+
         times = []
         for light in self.lights:
             if light.addr == addr:
-                times.append((light, light.transition_start(colors, name, scene_id), time()))
+                times.append((
+                    light,
+                    light.transition_start(colors, name, scene_id),
+                    time()))
 
         while times:
             light, sleep_time, start_time = times.pop(0)
             if sleep_time + start_time < time():
-                light.transition_end(colors[-1])
+                light.transition_end(end_scene, end_scene_name, end_scene_id)
             else:
                 times.append((light, sleep_time, start_time))
