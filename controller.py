@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """
 Automated controller for lights.
 
@@ -28,47 +28,127 @@ Elgato Light Controller
     """)
     sys.exit(status)
 
+def parse_rules(rules: list) -> list:
+    """
+    Parse the rules of a timer.
+
+    PROBLEM: calendar does not start on same day, each month is a different length, etc
+    """
+    index = 0
+    while rules:
+        current_token = rules[index]
+        if current_token == '(':
+            # grab everything until you reach a ')' and run it through `parse_rules` put the output value in the index of the open paren
+            mini_rules = [current_token]
+            while rules:
+                next_token = rules.pop(index)
+                mini_rules.append(next_token)
+                if next_token == ')':
+                    break
+            if mini_rules[-1] != ')':
+                print("failed to find closing paren")
+                print("buffer", mini_rules)
+                return []
+            new_token = parse_rules(mini_rules)
+            if len(new_token) != 1:
+                print("parser returned a list of length != 1 when parsing parens")
+                print("returned token:", new_token)
+                return []
+            rules.insert(index, new_token[0])  # insert the new token in the index of the open paren
+        elif current_token == '&':
+            # grab the previous and next tokens and compute the new value
+            try:
+                new_val = rules[index-1] & rules[index+1]
+                rules[index - 1] = new_val  # make the prev val the output of the &
+                rules.pop(index)  # remove the '&' token
+                rules.pop(index)  # remove the second val
+                index -= 1
+            except Exception:
+                print("failed to apply &")
+                return []
+        elif current_token == '|':
+            # grab the previous and next tokens and compute the new value
+            try:
+                new_val = rules[index-1] | rules[index+1]
+                rules[index - 1] = new_val  # make the prev val the output of the |
+                rules.pop(index)  # remove the '|' token
+                rules.pop(index)  # remove the second val
+                index -= 1
+            except Exception:
+                print("failed to apply |")
+                return []
+            pass
+        elif current_token == '-':
+            # calc range
+            try:
+                start_range = rules[index - 1]
+                end_range = rules[index + 1]
+                # all of the bits between start_range and end_range should be one
+                # find the index of the highest bit of the start of the range and
+                # the index of the lowest bit of the end of the range
+
+                # could do a white mask shifted left to the smart & white mask shift left to end of the end range
+                # PROBLEM: that would get really weird with days of the week because they do not have a designated "start" and "stop"
+            except Exception:
+                print("failed to calculate range at index", index)
+                return []
+        else:
+            # hit a val token
+            # Do not know if you actually need to do anything with these
+            pass
+
 
 def get_timers(timer_file):
     """
     Return a list of timers.
 
-        Timers read from LIGHT_TIMERS file
-        Raw file should read:
-        TIME,first element in the scene],second element in the scene, etc
-        where '|' is used to separate individual components of each scene element
-
-        for example:
-        TIME,HUE|SATURATION|BRIGHTNESS|DURATION|TRANSITION,HUE|SATURATION|BRIGHT...
+        Timers read from `timer_file`
 
         On failure, the function returns `timers` in its current state
+
+        YEAR RANGE, RULESET, ACTIVATION TIME, TRANSITION SCENE, END SCENE
+
+        TODO: add functionality to "set to a new scene"
+            Look at note in lightStripLib.transition_start for more details
+
+        TODO: search for lights by name/group instead of IP (then convert this to IP addr)
+
+        TODO: update how timers are stored
+
+        Goals:
+            date range for activation (oct1st - dec1st)
+            days of week to activate (just do a bit representing each day)
+            I guess you could also include rules for years (but make this optional)
+        current implementation:
+            allowed months, allowed days (0-whatever), allowed weekdays (sun, mon, etc), daily activation time
+
+            at start of each day, datetime gets year/month/day/weekday and tags each timer as active or inactive
+
+            for all active timers: do normal daytime stuff
+
+
+        TODO: when timer goes out of range, delete it from the list of timers (year ranges only)
+
+
     """
-    timers = [] # list of timers
-                # each timer is a tuple consisting of (TIME, TRANSITION, ACTIVATED, LIGHTS)
-                # where the time is HHMM in 24 hour time and TRANSITION is a list of tuples
-                # each transition tuple consists of (HUE, SATURATION, BRIGHTNESS, DURATION, TRANSITION)
-                # where HUE, SATURATION, and BRIGHTNESS are floats and DURATION, TRANSITION are integers
-                # representing the DURATION and TRANSITION length of each part of the scene in miliseconds
+    timers = []  # list of timers
+
     with open(timer_file, 'r') as timer_file:
         for raw_timer in timer_file:
             raw_input = raw_timer.split(',')
-            time = 0000
-            try:
-                time = int(raw_input.pop(0))
-            except Exception:
-                print("failed to parse time:", time)
-                return timers
-            lights = []
-            try:
-                lights = [l for l in raw_input.pop(0).split('|') if l]
-            except Exception:
-                print("failed to parse lights")
-                return timers
-            scene_elements = []
-            while raw_input:
+            # first thing: year range
+            raw_year = raw_input.pop(0)
+
+            # second thing: bit mask rules
+            raw_rules = raw_input.pop(0).split(" ")
+
+            # third thing: transition
+            raw_transition = raw_input.pop(0).split(';')  # might change this syntax later
+            transition_elements = []
+            while raw_transition:
                 scene_element = raw_input.pop(0).split('|')
                 try:
-                    scene_elements.append((
+                    transition_elements.append((
                         float(scene_element[0]),
                         float(scene_element[1]),
                         float(scene_element[2]),
@@ -77,8 +157,23 @@ def get_timers(timer_file):
                 except Exception:
                     print("failed to parse scene element:", scene_element)
                     return timers
-            # time to activate, elements, bool if the timer has been activated today, lights to be activated
-            timers.append((time, scene_elements, False, lights))
+
+            # fourth thing: end state
+            raw_end_state = raw_input.pop(0).split(';')  # might change this syntax later
+            end_elements = []
+            while raw_end_state:
+                scene_element = raw_end_state.pop(0).split('|')
+                try:
+                    end_elements.append((
+                        float(scene_element[0]),
+                        float(scene_element[1]),
+                        float(scene_element[2]),
+                        int(scene_element[3]),
+                        int(scene_element[4])))
+                except Exception:
+                    print("failed to parse scene element:", scene_element)
+                    return timers
+            timers.append(())  # add the timer to the list
     return timers
 
 
@@ -106,30 +201,17 @@ def log(message, MODE="quiet", output_file: str = "stdout"):
                 message)
             out.close()
 
-
 def main():
-    """Run the program."""
-    LOG_FILE = "controller-log.log"
-    MODE = "normal"
-    # TODO: make this program respond to command line args
-    args = sys.argv[1:]
-    while args:
-        current_arg = args.pop(0)
-        if current_arg == "-l":
-            try:
-                LOG_FILE = args.pop(0)
-            except Exception:
-                usage(1)
-        if current_arg == '-q':
-            MODE = "quiet"
-        else:
-            usage(1)
+    """
+    Run the main driver for program.
 
+    TODO: make this survive a network failure or change in IP addr
+    TODO: script that checks for updates to the main branch and relaunches the controller
+    """
     # get hash
     current_hash = subprocess.run(
         ['md5sum', TIMER_FILE],
         stdout=subprocess.PIPE).stdout.decode('utf-8')
-
     timers = get_timers(TIMER_FILE)   # get all the timers
     # TODO: sort the timers
     room = Room()
