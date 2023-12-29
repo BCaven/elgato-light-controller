@@ -22,11 +22,12 @@ def usage(status):
 Elgato Light Controller
     USAGE python3 controller.py [FLAGS]
 
+    -h              display this message
     -l LOG_FILE     change location of log file
     -q              turn off logging
-
     """)
     sys.exit(status)
+
 
 def parse_rules(rules: list) -> list:
     """
@@ -128,8 +129,6 @@ def get_timers(timer_file):
 
 
         TODO: when timer goes out of range, delete it from the list of timers (year ranges only)
-
-
     """
     timers = []  # list of timers
 
@@ -177,7 +176,11 @@ def get_timers(timer_file):
     return timers
 
 
-def check_file(file: str, old_hash: str, MODE="quiet", output_file: str = "stdout") -> bool:
+def check_file(
+        file: str,
+        old_hash: str,
+        MODE="quiet",
+        output_file: str = "stdout") -> bool:
     """Check if a file changed."""
     new_hash = subprocess.run(
         ['md5sum', file.encode('utf-8')],
@@ -201,6 +204,7 @@ def log(message, MODE="quiet", output_file: str = "stdout"):
                 message)
             out.close()
 
+
 def main():
     """
     Run the main driver for program.
@@ -208,6 +212,25 @@ def main():
     TODO: make this survive a network failure or change in IP addr
     TODO: script that checks for updates to the main branch and relaunches the controller
     """
+    MODE = "verbose"
+    LOG_FILE = "controller.log"
+    # parse args
+    arguments = sys.argv[1:]
+    while arguments:
+        arg = arguments.pop(0)
+        if arg == '-h':
+            usage(0)
+        elif arg == '-l':
+            try:
+                LOG_FILE = arguments.pop(0)
+            except Exception:
+                log("Failed to parse arguments", MODE="stdout")
+                usage(1)
+        elif arg == '-q':
+            MODE = "quiet"
+        else:
+            usage(1)
+
     # get hash
     current_hash = subprocess.run(
         ['md5sum', TIMER_FILE],
@@ -229,14 +252,20 @@ def main():
             log(f"{current_time} - timers: {len(timers)}\n", MODE, LOG_FILE)
             for t in timers:
                 time, transition, activated, lights = t
-                log(f"\t{time} : {'done' if activated else 'waiting'}\n", MODE, LOG_FILE)
+                log(
+                    f"\t{time} : {'done' if activated else 'waiting'}\n",
+                    MODE, LOG_FILE)
         for index, timer in enumerate(timers):
             time, transition, activated, lights = timer
             if abs(current_time - time) <= 1 and not activated:
-                log(f"controller ran: {transition} at {time}\n", MODE, LOG_FILE)
+                log(
+                    f"controller ran: {transition} at {time}\n",
+                    MODE, LOG_FILE)
                 # run the transition
                 if lights:
-                    log(f"only transitioning lights: {lights}\n", MODE, LOG_FILE)
+                    log(
+                        f"only transitioning lights: {lights}\n",
+                        MODE, LOG_FILE)
                     for light in lights:
                         room.light_transition(light, transition)
                 else:
@@ -247,6 +276,7 @@ def main():
                 activated = False
 
             timers[index] = (time, transition, activated, lights)
+
         sleep(60)  # wait a minute
 
         # check for any new timers only if the timer file has changed

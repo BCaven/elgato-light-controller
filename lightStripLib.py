@@ -28,11 +28,13 @@ class ServiceListener:
         """Unused but required for zeroconf."""
 
     def update_service(self, zeroconf, type, name):
+        print("update was called")
         """Unusued but required for zeroconf."""
 
     def add_service(self, zeroconf, type, name):
         """Add a service to the list."""
         info = zeroconf.get_service_info(type, name)
+        print("found", info)
         self.services.append(info)
 
 
@@ -160,8 +162,10 @@ class LightStrip:
         if 'scene' in self.data['lights'][0]:
             self.is_scene = True
             self.scene = Scene(self.data['lights'][0]['scene'])
+        elif 'name' in self.data['lights'][0]:
+            self.is_scene = True
 
-    def find_light_strips_zeroconf(service_type='_elg._tcp.local.', TIMEOUT=5):
+    def find_light_strips_zeroconf(service_type='_elg._tcp.local.', TIMEOUT=15):
         """
         Use multicast to find all elgato light strips.
 
@@ -183,9 +187,11 @@ class LightStrip:
         zc = zeroconf.Zeroconf()
         listener = ServiceListener()
         browser = zeroconf.ServiceBrowser(zc, service_type, listener)
+        print("starting listener...")
         sleep(TIMEOUT)      # this is not a rolling admission... I could rework it to be that way, and it might be smarter to do that
         browser.cancel()    # however right now this works just fine. In theory it will lose connection to the lights if they get assigned to a new IP
                             # but in that case I am going to assume it is because the network bounces, which means this function will get called again anyways
+        print("collecting things...")
         for service in listener.get_services():
             #print("name", service.get_name())
             #print("properties:", service.properties)
@@ -195,6 +201,7 @@ class LightStrip:
                 prospect_light = LightStrip(socket.inet_ntoa(addr), service.port, service.get_name())
                 # TODO add support for Key Lights
                 if 'Strip' in prospect_light.info['productName']:
+                    print("\tadding light strip")
                     lightstrips.append(prospect_light)
 
         return lightstrips
@@ -328,8 +335,27 @@ class LightStrip:
         }
         return self.set_strip_data(self.data)
 
-    def update_scene_data(self, scene):
+    def update_scene_data(self, scene,
+                          scene_name="transition-scene",
+                          scene_id="",
+                          brightness: float = 100.0):
         """Update just the scene data."""
+        if not self.is_scene:
+            print("light strip is not currently assigned to a scene, autogenerating")
+            self.make_scene(scene_name, scene_id)
+
+        if not scene:
+            print("assigining scene by name")
+            self.data['lights'][0]['name'] = scene_name
+            if scene_id:
+                print("also assigining scene by id")
+                self.data['lights'][0]['id'] = scene_id
+            print("purging scene data")
+            if not self.data['lights'][0].pop('scene'):
+                print("scene was not specified")
+            if not self.data['lights'][0].pop('numberOfSceneElements'):
+                print("number of scene elements was not specified")
+            return
         self.data['lights'][0]['scene'] = scene.data
         self.data['lights'][0]['numberOfSceneElements'] = len(scene.data)
 
@@ -397,8 +423,7 @@ class LightStrip:
         self.update_scene_data(self.scene)
         light_status = self.set_strip_data(self.data)
         # return the wait time
-        return ((wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000,
-                light_status)
+        return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
 
     def transition_end(self,
                        end_scene: list,
@@ -411,11 +436,11 @@ class LightStrip:
         sets the scene to the end_color
         almost identical to lightStrip.update_color - primarily used to keep code readable
         """
-        if not end_scene:
-            # oh no, you did an invalid input
-            print("missing end scene")
-            return
-        if len(end_scene) > 1:
+        if not end_scene:  # TODO: make this cleaner
+            print("missing end scene, using scene name")
+            self.update_scene_data(None, end_scene_name, end_scene_id)
+            return self.set_strip_data(self.data)
+        elif len(end_scene) == 1:
             hue, saturation, brightness, _, _ = end_scene[0]
             is_on = 1 if brightness > 0 else 0
             return self.update_color(is_on, hue, saturation, brightness)
@@ -435,7 +460,7 @@ class Room:
         """Init the room."""
         self.lights = lights
 
-    def setup(self, service_type='_elg._tcp.local.', timeout=5):
+    def setup(self, service_type='_elg._tcp.local.', timeout=15):
         """Find all the lights."""
         self.lights = LightStrip.find_light_strips_zeroconf(
             service_type, timeout)
@@ -478,8 +503,10 @@ class Room:
 
         while times:
             # TODO: check if this can be optimized to use less
-            light, transition_start_output, start_time = times.pop(0)
-            sleep_time, success = transition_start_output
+            light, sleep_time, start_time = times.pop(0)
+            # light, transition_start_output, start_time = times.pop(0)
+            # print(transition_start_output)
+            # sleep_time, success = transition_start_output
             if sleep_time + start_time < time():
                 rescan = rescan or light.transition_end(
                     end_scene, end_scene_name, end_scene_id)
