@@ -34,7 +34,6 @@ class ServiceListener:
     def add_service(self, zeroconf, type, name):
         """Add a service to the list."""
         info = zeroconf.get_service_info(type, name)
-        print("found", info)
         self.services.append(info)
 
 
@@ -58,6 +57,8 @@ class Scene:
 
     def __init__(self, input_scene=[]):
         """Init the scene."""
+        for item in input_scene:
+            assert type(item) is dict, f"TypeError: item: {item} is type: {type(item)} not type: dict"
         self.data = input_scene
 
     def add_scene(self, hue, saturation, brightness, durationMs, transitionMs):
@@ -187,11 +188,10 @@ class LightStrip:
         zc = zeroconf.Zeroconf()
         listener = ServiceListener()
         browser = zeroconf.ServiceBrowser(zc, service_type, listener)
-        print("starting listener...")
         sleep(TIMEOUT)      # this is not a rolling admission... I could rework it to be that way, and it might be smarter to do that
         browser.cancel()    # however right now this works just fine. In theory it will lose connection to the lights if they get assigned to a new IP
                             # but in that case I am going to assume it is because the network bounces, which means this function will get called again anyways
-        print("collecting things...")
+        print("Lights:")
         for service in listener.get_services():
             #print("name", service.get_name())
             #print("properties:", service.properties)
@@ -201,7 +201,7 @@ class LightStrip:
                 prospect_light = LightStrip(socket.inet_ntoa(addr), service.port, service.get_name())
                 # TODO add support for Key Lights
                 if 'Strip' in prospect_light.info['productName']:
-                    print("\tadding light strip")
+                    print(f"\tadding light strip: {prospect_light.info['displayName']}")
                     lightstrips.append(prospect_light)
 
         return lightstrips
@@ -286,6 +286,8 @@ class LightStrip:
         Returns True if successful
         TODO: investigate if sending the entire JSON is necessary or if we can just send the things that need to be changed
         """
+        print("attempting message:")
+        print(json.dumps(new_data))
         r = requests.put(
             'http://' + self.full_addr + '/elgato/lights',
             data=json.dumps(new_data))
@@ -293,6 +295,9 @@ class LightStrip:
         if r.status_code == requests.codes.ok:
             self.data = r.json()
             return True
+        print("attempted message:")
+        print(json.dumps(new_data))
+        print("response:")
         print(r.text)
         return False
 
@@ -340,6 +345,7 @@ class LightStrip:
                           scene_id="",
                           brightness: float = 100.0):
         """Update just the scene data."""
+        print("updating scene data")
         if not self.is_scene:
             print("light strip is not currently assigned to a scene, autogenerating")
             self.make_scene(scene_name, scene_id)
@@ -355,15 +361,18 @@ class LightStrip:
                 print("scene was not specified")
             if not self.data['lights'][0].pop('numberOfSceneElements'):
                 print("number of scene elements was not specified")
-            return
-        self.data['lights'][0]['scene'] = scene.data
-        self.data['lights'][0]['numberOfSceneElements'] = len(scene.data)
+        else:
+            print("scene:", scene)
+            assert type(scene) is Scene, "scene is not a list"
+            self.data['lights'][0]['scene'] = scene.data
+            self.data['lights'][0]['numberOfSceneElements'] = len(scene.data)
 
     def make_scene(self,
                    name: str,
                    scene_id: str,
                    brightness: float = 100.0):
         """Create a scene."""
+        print("making the light a scene")
         self.data = {
             'numberOfLights': 1,
             'lights': [
@@ -396,6 +405,7 @@ class LightStrip:
 
         TODO: see if you can pick a different way to cycle between colors in a scene
         """
+        print("---------transition starting")
         self.make_scene(name, scene_id, 100)
         wait_time_ms = 0
         # check if the light has already been set to a color,
@@ -420,7 +430,7 @@ class LightStrip:
                 transitionMs)
             wait_time_ms += durationMs + transitionMs
         # update the light with the new scene
-        self.update_scene_data(self.scene)
+        self.update_scene_data(self.scene, scene_name=name, scene_id=scene_id)
         light_status = self.set_strip_data(self.data)
         # return the wait time
         return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
@@ -436,20 +446,28 @@ class LightStrip:
         sets the scene to the end_color
         almost identical to lightStrip.update_color - primarily used to keep code readable
         """
+        print("--------transition ending")
+        assert type(end_scene) is list, f"TypeError: {end_scene} is type: {type(end_scene)} not type: list"
+        print("scene passed into transition_end:", end_scene)
         if not end_scene:  # TODO: make this cleaner
             print("missing end scene, using scene name")
-            self.update_scene_data(None, end_scene_name, end_scene_id)
+            self.update_scene_data(None, scene_name=end_scene_name, scene_id=end_scene_id)
             return self.set_strip_data(self.data)
         elif len(end_scene) == 1:
+            print("setting light to single color")
             hue, saturation, brightness, _, _ = end_scene[0]
             is_on = 1 if brightness > 0 else 0
             return self.update_color(is_on, hue, saturation, brightness)
         else:
             # the end scene is an actual scene
             # TODO: make scene brightness variable
+            print("setting transition to end on a scene")
             self.make_scene(end_scene_name, end_scene_id, 100)
-            self.scene = Scene(end_scene)
-            self.update_scene_data(self.scene)
+            self.scene = Scene([])
+            for item in end_scene:
+                hue, saturation, brightness, durationMs, transitionMs = item
+                self.scene.add_scene(hue, saturation, brightness, durationMs, transitionMs)
+            self.update_scene_data(self.scene, scene_name=end_scene_name, scene_id=end_scene_id)
             return self.set_strip_data(self.data)
 
 
@@ -458,6 +476,7 @@ class Room:
 
     def __init__(self, lights: list = []):
         """Init the room."""
+        assert type(lights) is list, f"TypeError: {lights} is type: {type(lights)} not type: list"
         self.lights = lights
 
     def setup(self, service_type='_elg._tcp.local.', timeout=15):
@@ -491,8 +510,6 @@ class Room:
         if not colors:
             print("cannot transition an empty scene")
             return
-        if not end_scene:
-            end_scene = colors[-1]
 
         times = []
         for light in self.lights:
@@ -508,10 +525,14 @@ class Room:
             # print(transition_start_output)
             # sleep_time, success = transition_start_output
             if sleep_time + start_time < time():
-                rescan = rescan or light.transition_end(
+                transition_status = light.transition_end(
                     end_scene, end_scene_name, end_scene_id)
+                print("transition status: ", transition_status)
+                rescan = rescan or not transition_status
+                print(rescan)
             else:
                 times.append((light, sleep_time, start_time))
+        return
         if rescan:
             print("rescanning because a light failed")
             self.setup()
@@ -548,6 +569,7 @@ class Room:
             else:
                 times.append((light, sleep_time, start_time))
 
+        return
         if rescan:
             print("rescanning because a light failed")
             self.setup()

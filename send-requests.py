@@ -36,8 +36,18 @@ def main():
         (352.3, 100.0, 45.8, 1000, 1000)
 
     ]
+    end_scene = [
+        (233.5, 100, 50.9, 1000, 5000),
+        (257.2, 86.9, 32.9, 1000, 5000)
+    ]
     print("\nTransition starting...")
-    room.room_transition(transition, end_scene="Moody")
+    room.room_transition(
+        transition,
+        name="transition-scene",
+        scene_id="transition-scene-id",
+        end_scene_name="Moody",
+        end_scene_id="69a0d769-0a63-46c6-906b-3d9c2286455c",
+        end_scene=end_scene)
 
     print("\nTransition ending...")
 
