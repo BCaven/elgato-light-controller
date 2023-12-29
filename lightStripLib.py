@@ -459,9 +459,10 @@ class Room:
                         end_scene_id="end-scene-id"):
         """
         Non blocking transition for all room lights.
-        
+
         TODO: return status of https request
         """
+        rescan = False
         if not colors:
             print("cannot transition an empty scene")
             return
@@ -477,11 +478,16 @@ class Room:
 
         while times:
             # TODO: check if this can be optimized to use less
-            light, sleep_time, start_time = times.pop(0)
+            light, transition_start_output, start_time = times.pop(0)
+            sleep_time, success = transition_start_output
             if sleep_time + start_time < time():
-                light.transition_end(end_scene, end_scene_name, end_scene_id)
+                rescan = rescan or light.transition_end(
+                    end_scene, end_scene_name, end_scene_id)
             else:
                 times.append((light, sleep_time, start_time))
+        if rescan:
+            print("rescanning because a light failed")
+            self.setup()
 
     def light_transition(self,
                          addr: str,
@@ -492,6 +498,7 @@ class Room:
                          end_scene_name="end-scene",
                          end_scene_id="end-scene-id"):
         """Non blocking transition for specific light in the room."""
+        rescan = False
         if not colors:
             print("cannot transition an empty scene")
             return
@@ -506,8 +513,14 @@ class Room:
                     time()))
 
         while times:
-            light, sleep_time, start_time = times.pop(0)
+            light, transition_start_output, start_time = times.pop(0)
+            sleep_time, success = transition_start_output
             if sleep_time + start_time < time():
-                light.transition_end(end_scene, end_scene_name, end_scene_id)
+                rescan = rescan or light.transition_end(
+                        end_scene, end_scene_name, end_scene_id)
             else:
                 times.append((light, sleep_time, start_time))
+
+        if rescan:
+            print("rescanning because a light failed")
+            self.setup()
