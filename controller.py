@@ -8,12 +8,11 @@ Timers are stored in the file pointed to by LIGHT_TIMERS
 Use cron or equivalent to have this program automatically run at startup
 """
 from lightStripLib import Room
+from timer import Timer
 from datetime import datetime
 from time import sleep
 import sys
 import subprocess
-
-TIMER_FILE = "light.transition"  # "light_timers.csv"
 
 
 def usage(status):
@@ -25,6 +24,7 @@ Elgato Light Controller
     -h              display this message
     -l LOG_FILE     change location of log file
     -q              turn off logging
+    -t TIMER_FILE   change location of timer file
     """)
     sys.exit(status)
 
@@ -99,7 +99,9 @@ def parse_rules(rules: list) -> list:
             pass
 
 
-def get_timers(timer_file):
+def get_timers(timer_file,
+               MODE="quiet",
+               LOG_FILE="stdout"):
     """
     Return a list of timers.
 
@@ -141,11 +143,21 @@ def get_timers(timer_file):
             # second thing: bit mask rules
             raw_rules = raw_input.pop(0).split(" ")
 
-            # third thing: transition
-            raw_transition = raw_input.pop(0).split(';')  # might change this syntax later
+            # third thing: activation time
+            activation_time = ""
+            try:
+                activation_time = int(raw_input.pop(0))
+            except Exception:
+                log("Failed to parse activation time", MODE, LOG_FILE)
+
+            # fourth thing: lights
+            lights = raw_input.pop(0)
+            lights = []  # TODO make this usable
+            # fourth thing: transition
+            raw_transition = raw_input.pop(0).split(';')  # might change this
             transition_elements = []
             while raw_transition:
-                scene_element = raw_input.pop(0).split('|')
+                scene_element = raw_transition.pop(0).split('|')
                 try:
                     transition_elements.append((
                         float(scene_element[0]),
@@ -157,8 +169,8 @@ def get_timers(timer_file):
                     print("failed to parse scene element:", scene_element)
                     return timers
 
-            # fourth thing: end state
-            raw_end_state = raw_input.pop(0).split(';')  # might change this syntax later
+            # fifth thing: end state
+            raw_end_state = raw_input.pop(0).split(';')  # might change this
             end_elements = []
             while raw_end_state:
                 scene_element = raw_end_state.pop(0).split('|')
@@ -172,7 +184,14 @@ def get_timers(timer_file):
                 except Exception:
                     print("failed to parse scene element:", scene_element)
                     return timers
-            timers.append(())  # add the timer to the list
+            timers.append(Timer(
+                year_range=raw_year,
+                rules=raw_rules,
+                time=activation_time,
+                active_lights=lights,
+                transition_scene=transition_elements,
+                end_scene=end_elements,
+                ))  # add the timer to the list
     return timers
 
 
@@ -214,6 +233,7 @@ def main():
     """
     MODE = "verbose"
     LOG_FILE = "controller.log"
+    TIMER_FILE = "light.transition"  # "light_timers.csv"
     # parse args
     arguments = sys.argv[1:]
     while arguments:
@@ -228,20 +248,24 @@ def main():
                 usage(1)
         elif arg == '-q':
             MODE = "quiet"
+        elif arg == '-t':
+            try:
+                TIMER_FILE = arguments.pop(0)
+            except Exception:
+                log("Failed to parse new TIMER_FILE", MODE="stdout")
+                usage(1)
         else:
             usage(1)
 
     # get hash
-    current_hash = subprocess.run(
-        ['md5sum', TIMER_FILE],
-        stdout=subprocess.PIPE).stdout.decode('utf-8')
+    current_hash = check_file(TIMER_FILE, "", MODE=MODE, output_file=LOG_FILE)
     timers = get_timers(TIMER_FILE)   # get all the timers
     # TODO: sort the timers
     room = Room()
     if not room.setup():            # get all the lights
         usage(1)
 
-    log(",".join(timers), MODE, LOG_FILE)
+    log(f"timers: {timers}", MODE, LOG_FILE)
 
     while True:  # make sure the timer never stops running
         if not timers:
@@ -251,12 +275,12 @@ def main():
         if current_time % 5 == 0:
             log(f"{current_time} - timers: {len(timers)}\n", MODE, LOG_FILE)
             for t in timers:
-                time, transition, activated, lights = t
+                year, rules, time, lights, transition, end_state, activated = t
                 log(
                     f"\t{time} : {'done' if activated else 'waiting'}\n",
                     MODE, LOG_FILE)
         for index, timer in enumerate(timers):
-            time, transition, activated, lights = timer
+            year, rules, time, lights, transition, end_state, activated = timer
             if abs(current_time - time) <= 1 and not activated:
                 log(
                     f"controller ran: {transition} at {time}\n",
@@ -270,7 +294,7 @@ def main():
                         room.light_transition(light, transition)
                 else:
                     log("ran transition on all lights\n", MODE, LOG_FILE)
-                    room.room_transition(transition)
+                    room.room_transition(transition, end_scene=end_state)
                 activated = True  # set the timer to activated
             elif current_time <= 1:
                 activated = False
