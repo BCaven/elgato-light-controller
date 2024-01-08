@@ -9,7 +9,6 @@ Use cron or equivalent to have this program automatically run at startup
 """
 from lightStripLib import Room
 from timer import Timer
-from datetime import datetime
 from time import sleep
 import sys
 import subprocess
@@ -111,9 +110,6 @@ def get_timers(timer_file,
 
         YEAR RANGE, RULESET, ACTIVATION TIME, TRANSITION SCENE, END SCENE
 
-        TODO: add functionality to "set to a new scene"
-            Look at note in lightStripLib.transition_start for more details
-
         TODO: search for lights by name/group instead of IP (then convert this to IP addr)
 
         TODO: update how timers are stored
@@ -196,17 +192,17 @@ def get_timers(timer_file,
 
 
 def check_file(
-        file: str,
+        filename: str,
         old_hash: str,
         MODE="quiet",
         output_file: str = "stdout") -> bool:
     """Check if a file changed."""
     new_hash = subprocess.run(
-        ['md5sum', file.encode('utf-8')],
+        ['md5sum', filename.encode('utf-8')],
         stdout=subprocess.PIPE).stdout.decode('utf-8')
     if old_hash != new_hash:
         log(
-            "checking for timers because timer file got modified",
+            "checking for timers.",
             MODE,
             output_file)
     return new_hash
@@ -219,21 +215,16 @@ def log(message, MODE="quiet", output_file: str = "stdout"):
             print(message)
         else:
             out = open(output_file, 'a')
-            out.write(
-                message)
+            out.write(message)
             out.close()
 
 
-def main():
-    """
-    Run the main driver for program.
-
-    TODO: make this survive a network failure or change in IP addr
-    TODO: script that checks for updates to the main branch and relaunches the controller
-    """
+def parse_args():
+    """Return variables."""
     MODE = "verbose"
     LOG_FILE = "controller.log"
-    TIMER_FILE = "light.transition"  # "light_timers.csv"
+    TIMER_FILE = "light.transition"
+    EXPECTED_NUM_LIGHTS = 3
     # parse args
     arguments = sys.argv[1:]
     while arguments:
@@ -254,60 +245,64 @@ def main():
             except Exception:
                 log("Failed to parse new TIMER_FILE", MODE="stdout")
                 usage(1)
+        elif arg == '-n':
+            try:
+                EXPECTED_NUM_LIGHTS = int(arguments.pop(0))
+            except Exception:
+                log("Failed to parse number of expected lights", MODE="stdout")
+                usage(1)
         else:
             usage(1)
 
+    return (MODE, LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS)
+
+
+def main():
+    """
+    Run the main driver for program.
+
+    TODO: make this survive a network failure or change in IP addr
+    TODO: script that checks for updates to the main branch and relaunches the controller
+    """
+    MODE, LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS = parse_args()
     # get hash
     current_hash = check_file(TIMER_FILE, "", MODE=MODE, output_file=LOG_FILE)
-    timers = get_timers(TIMER_FILE)   # get all the timers
+    # get all the timers
+    timers = get_timers(TIMER_FILE)
     # TODO: sort the timers
     room = Room()
-    if not room.setup():            # get all the lights
-        usage(1)
+    assert room.setup(), "Failed to set up room"
+    if EXPECTED_NUM_LIGHTS > len(room.lights):
+        room.setup()
+    times = ",".join([str(t.get_activation_time()) for t in timers])
+    log(f"timers: {times}", MODE, LOG_FILE)
+    # print("Number of lights:", len(room.lights))
+    while True:
+        assert timers, "Timer list is empty"
 
-    log(f"timers: {timers}", MODE, LOG_FILE)
-
-    while True:  # make sure the timer never stops running
-        if not timers:
-            # if there are no timers, we are just going to stop the program
-            sys.exit(1)
-        current_time = int(datetime.now().strftime('%H%M'))
-        if current_time % 5 == 0:
-            log(f"{current_time} - timers: {len(timers)}\n", MODE, LOG_FILE)
-            for t in timers:
-                year, rules, time, lights, transition, end_state, activated = t
-                log(
-                    f"\t{time} : {'done' if activated else 'waiting'}\n",
+        for timer in timers:
+            # print(timer.get_activation_time(), timer.check_timer())
+            if timer.check_timer():
+                transition_scene, end_scene = timer.get_transition()
+                if not room.room_transition(
+                        transition_scene,
+                        end_scene=end_scene):
+                    # run it again with the new lights
+                    room.room_transition(
+                        transition_scene,
+                        end_scene=end_scene)
+                timer.activated = True
+                log(f"\t{timer.get_activation_time()} - Activated",
                     MODE, LOG_FILE)
-        for index, timer in enumerate(timers):
-            year, rules, time, lights, transition, end_state, activated = timer
-            if abs(current_time - time) <= 1 and not activated:
-                log(
-                    f"controller ran: {transition} at {time}\n",
-                    MODE, LOG_FILE)
-                # run the transition
-                if lights:
-                    log(
-                        f"only transitioning lights: {lights}\n",
-                        MODE, LOG_FILE)
-                    for light in lights:
-                        room.light_transition(light, transition)
-                else:
-                    log("ran transition on all lights\n", MODE, LOG_FILE)
-                    room.room_transition(transition, end_scene=end_state)
-                activated = True  # set the timer to activated
-            elif current_time <= 1:
-                activated = False
 
-            timers[index] = (time, transition, activated, lights)
-
-        sleep(60)  # wait a minute
-
+        sleep(60)
         # check for any new timers only if the timer file has changed
         new_hash = check_file(TIMER_FILE, current_hash, MODE, LOG_FILE)
         if current_hash != new_hash:
             timers = get_timers(TIMER_FILE)
             current_hash = new_hash
+            times = ",".join([str(t.get_activation_time()) for t in timers])
+            log(f"timers: {times}", MODE, LOG_FILE)
         # and repeat the process
 
 

@@ -1,6 +1,8 @@
 #! usr/bin/python3
 """Timer class."""
 
+from datetime import datetime
+
 
 class Timer:
     """Timer class to define timers used by the controller."""
@@ -24,8 +26,37 @@ class Timer:
         self.end_scene = end_scene
         self.activated = False
 
-    def check_timer(self, time):
-        """Check if the timer should be activated."""
+    def check_timer(self):
+        """
+        Check if the timer should be activated.
 
-    def run_timer(self):
-        """Run the timer."""
+        Returns Boolean if timer hit, returns None if timer was not activated
+        TODO: make a better return system for this
+        """
+        weekday, month, year, time = tuple(
+            datetime.now().strftime('%w-%m-%y-%H%M').split('-'))
+        time = int(time)
+        # TODO: write check for rules
+        print("real time:", time, "activation time:", self.activation_time)
+        return time == self.activation_time and not self.activated
+
+    def get_transition(self):
+        """Return transition scene and end scene."""
+        return (self.transition_scene, self.end_scene)
+
+    def info(self):
+        """Return information about the timer."""
+        return (
+            self.rules,
+            self.year_range,
+            self.active_lights,
+            self.activation_time,
+            self.activated)
+
+    def get_activation_time(self):
+        """Return activation time."""
+        return self.activation_time
+
+    def is_activated(self):
+        """Return bool if activated."""
+        return self.activated

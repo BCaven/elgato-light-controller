@@ -25,11 +25,16 @@ class ServiceListener:
         return self.services
 
     def remove_service(self, zeroconf, type, name):
-        """Unused but required for zeroconf."""
+        """Remove a service."""
+        info = zeroconf.get_service_info(type, name)
+        self.services.remove(info)
 
     def update_service(self, zeroconf, type, name):
+        """Update a service."""
         print("update was called")
-        """Unusued but required for zeroconf."""
+        # info = zeroconf.get_service_info(type, name)
+        # index = self.services.index(info)
+        # self.services[index] =
 
     def add_service(self, zeroconf, type, name):
         """Add a service to the list."""
@@ -206,6 +211,11 @@ class LightStrip:
 
         return lightstrips
 
+    def start_rolling_admission_zeroconf(
+            zeroconf, service_type='_elg._tcp.local.'):
+        """Start a rolling admission for Zeroconf."""
+        # TODO: write this method
+
     def find_light_strips_manual(strips) -> list:
         """TODO: write this method."""
         # oof we have to do it the hardcore way or just give up...
@@ -245,11 +255,7 @@ class LightStrip:
         return self.data
 
     def get_strip_info(self):
-        """
-        Send a get request to the light.
-
-            should get back something in this format:
-        """
+        """Send a get request to the light."""
         self.info = requests.get(
             'http://' + self.full_addr + '/elgato/accessory-info',
             verify=False).json()
@@ -286,19 +292,22 @@ class LightStrip:
         Returns True if successful
         TODO: investigate if sending the entire JSON is necessary or if we can just send the things that need to be changed
         """
-        print("attempting message:")
-        print(json.dumps(new_data))
-        r = requests.put(
-            'http://' + self.full_addr + '/elgato/lights',
-            data=json.dumps(new_data))
-        # if the request was accepted, modify self.data
-        if r.status_code == requests.codes.ok:
-            self.data = r.json()
-            return True
-        print("attempted message:")
-        print(json.dumps(new_data))
-        print("response:")
-        print(r.text)
+        # print("attempting message:")
+        # print(json.dumps(new_data))
+        try:
+            r = requests.put(
+                'http://' + self.full_addr + '/elgato/lights',
+                data=json.dumps(new_data))
+            # if the request was accepted, modify self.data
+            if r.status_code == requests.codes.ok:
+                self.data = r.json()
+                return True
+            # print("attempted message:")
+            # print(json.dumps(new_data))
+            # print("response:")
+            print(r.text)
+        except Exception:
+            pass
         return False
 
     def set_strip_settings(self, new_data: json) -> bool:
@@ -307,24 +316,30 @@ class LightStrip:
 
         Returns True on success
         """
-        r = requests.put(
-            'http://' + self.full_addr + '/elgato/lights/settings',
-            data=json.dumps(new_data))
-        print(r.text)
-        if r.status_code == requests.codes.ok:
-            self.settings = new_data
-            return True
+        try:
+            r = requests.put(
+                'http://' + self.full_addr + '/elgato/lights/settings',
+                data=json.dumps(new_data))
+            print(r.text)
+            if r.status_code == requests.codes.ok:
+                self.settings = new_data
+                return True
+        except Exception:
+            pass
         return False
 
     def set_strip_info(self, new_data: json) -> bool:
         """Set the strip info."""
-        r = requests.put(
-            'http://' + self.full_addr + '/elgato/accessory-info',
-            data=json.dumps(new_data))
-        if r.status_code == requests.codes.ok:
-            self.info = new_data
-            return True
-        print(r.text)
+        try:
+            r = requests.put(
+                'http://' + self.full_addr + '/elgato/accessory-info',
+                data=json.dumps(new_data))
+            if r.status_code == requests.codes.ok:
+                self.info = new_data
+                return True
+            print(r.text)
+        except Exception:
+            pass
         return False
 
     def update_color(self, on, hue, saturation, brightness) -> bool:
@@ -372,7 +387,7 @@ class LightStrip:
                    scene_id: str,
                    brightness: float = 100.0):
         """Create a scene."""
-        print("making the light a scene")
+        # print("making the light a scene")
         self.data = {
             'numberOfLights': 1,
             'lights': [
@@ -405,7 +420,7 @@ class LightStrip:
 
         TODO: see if you can pick a different way to cycle between colors in a scene
         """
-        print("---------transition starting")
+        # print("---------transition starting")
         self.make_scene(name, scene_id, 100)
         wait_time_ms = 0
         # check if the light has already been set to a color,
@@ -446,28 +461,30 @@ class LightStrip:
         sets the scene to the end_color
         almost identical to lightStrip.update_color - primarily used to keep code readable
         """
-        print("--------transition ending")
+        # print("--------transition ending")
         assert type(end_scene) is list, f"TypeError: {end_scene} is type: {type(end_scene)} not type: list"
-        print("scene passed into transition_end:", end_scene)
+        # print("scene passed into transition_end:", end_scene)
         if not end_scene:  # TODO: make this cleaner
-            print("missing end scene, using scene name")
+            # print("missing end scene, using scene name")
             self.update_scene_data(None, scene_name=end_scene_name, scene_id=end_scene_id)
             return self.set_strip_data(self.data)
         elif len(end_scene) == 1:
-            print("setting light to single color")
+            # print("setting light to single color")
             hue, saturation, brightness, _, _ = end_scene[0]
             is_on = 1 if brightness > 0 else 0
             return self.update_color(is_on, hue, saturation, brightness)
         else:
             # the end scene is an actual scene
             # TODO: make scene brightness variable
-            print("setting transition to end on a scene")
+            # print("setting transition to end on a scene")
             self.make_scene(end_scene_name, end_scene_id, 100)
             self.scene = Scene([])
             for item in end_scene:
                 hue, saturation, brightness, durationMs, transitionMs = item
-                self.scene.add_scene(hue, saturation, brightness, durationMs, transitionMs)
-            self.update_scene_data(self.scene, scene_name=end_scene_name, scene_id=end_scene_id)
+                self.scene.add_scene(
+                    hue, saturation, brightness, durationMs, transitionMs)
+            self.update_scene_data(
+                self.scene, scene_name=end_scene_name, scene_id=end_scene_id)
             return self.set_strip_data(self.data)
 
 
@@ -508,7 +525,7 @@ class Room:
         """
         rescan = False
         if not colors:
-            print("cannot transition an empty scene")
+            # print("cannot transition an empty scene")
             return
 
         times = []
@@ -527,15 +544,15 @@ class Room:
             if sleep_time + start_time < time():
                 transition_status = light.transition_end(
                     end_scene, end_scene_name, end_scene_id)
-                print("transition status: ", transition_status)
+                # print("transition status: ", transition_status)
                 rescan = rescan or not transition_status
-                print(rescan)
+                # print(rescan)
             else:
                 times.append((light, sleep_time, start_time))
-        return
         if rescan:
-            print("rescanning because a light failed")
+            # print("rescanning because a light failed")
             self.setup()
+        return not rescan
 
     def light_transition(self,
                          addr: str,
@@ -548,7 +565,7 @@ class Room:
         """Non blocking transition for specific light in the room."""
         rescan = False
         if not colors:
-            print("cannot transition an empty scene")
+            # print("cannot transition an empty scene")
             return
         if not end_scene:
             end_scene = colors[-1]
@@ -571,5 +588,5 @@ class Room:
 
         return
         if rescan:
-            print("rescanning because a light failed")
+            # print("rescanning because a light failed")
             self.setup()
