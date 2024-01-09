@@ -12,6 +12,7 @@ from timer import Timer
 from time import sleep
 import sys
 import subprocess
+from os.path import isfile
 
 
 def usage(status):
@@ -211,10 +212,15 @@ def check_file(
 def log(message, MODE="quiet", output_file: str = "stdout"):
     """Log the message in the appropriate place."""
     if MODE != "quiet":
-        if MODE or output_file == "stdout":
+        if MODE == "stdout" or output_file == "stdout":
             print(message)
         else:
+            if not isfile(output_file):
+                create = open(output_file, 'w')
+                create.write("")
+                create.close()
             out = open(output_file, 'a')
+            message = message + "\n"
             out.write(message)
             out.close()
 
@@ -274,36 +280,51 @@ def main():
     assert room.setup(), "Failed to set up room"
     if EXPECTED_NUM_LIGHTS > len(room.lights):
         room.setup()
+    log("Lights:", MODE, LOG_FILE)
+    light_names = ", ".join(
+        [light.info['displayName'] for light in room.lights])
+    log(light_names, MODE, LOG_FILE)
+
     times = ",".join([str(t.get_activation_time()) for t in timers])
-    log(f"timers: {times}", MODE, LOG_FILE)
-    # print("Number of lights:", len(room.lights))
-    while True:
-        assert timers, "Timer list is empty"
+    log(f"timers: {times}", MODE=MODE, output_file=LOG_FILE)
+    try:
+        while True:
+            assert timers, "Timer list is empty"
 
-        for timer in timers:
-            # print(timer.get_activation_time(), timer.check_timer())
-            if timer.check_timer():
-                transition_scene, end_scene = timer.get_transition()
-                if not room.room_transition(
-                        transition_scene,
-                        end_scene=end_scene):
-                    # run it again with the new lights
-                    room.room_transition(
-                        transition_scene,
-                        end_scene=end_scene)
-                timer.activated = True
-                log(f"\t{timer.get_activation_time()} - Activated",
-                    MODE, LOG_FILE)
+            for timer in timers:
+                if timer.check_timer():
+                    transition_scene, end_scene = timer.get_transition()
+                    if not room.room_transition(
+                            transition_scene,
+                            end_scene=end_scene):
+                        # run it again with the new lights
+                        room.room_transition(
+                            transition_scene,
+                            end_scene=end_scene)
+                        log(f"Timer {timer.get_activation_time()} failed - re-scanned and ran timer again", MODE, LOG_FILE)
+                        log("New lights:", MODE, LOG_FILE)
+                        light_names = ", ".join(
+                            [light.info['displayName'] for light in room.lights])
+                        log(light_names, MODE, LOG_FILE)
 
-        sleep(60)
-        # check for any new timers only if the timer file has changed
-        new_hash = check_file(TIMER_FILE, current_hash, MODE, LOG_FILE)
-        if current_hash != new_hash:
-            timers = get_timers(TIMER_FILE)
-            current_hash = new_hash
-            times = ",".join([str(t.get_activation_time()) for t in timers])
-            log(f"timers: {times}", MODE, LOG_FILE)
-        # and repeat the process
+                    timer.activated = True
+                    log(f"\t{timer.get_activation_time()} - Activated",
+                        MODE, LOG_FILE)
+
+            sleep(60)
+            # check for any new timers only if the timer file has changed
+            new_hash = check_file(TIMER_FILE, current_hash, MODE, LOG_FILE)
+            if current_hash != new_hash:
+                timers = get_timers(TIMER_FILE)
+                current_hash = new_hash
+                times = ",".join([str(t.get_activation_time()) for t in timers])
+                log(f"timers: {times}", MODE, LOG_FILE)
+            # and repeat the process
+    except Exception as e:
+        log("Caught exception:", MODE, LOG_FILE)
+        log(e, MODE, LOG_FILE)
+        log("Exiting program...", MODE, LOG_FILE)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

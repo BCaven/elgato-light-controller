@@ -8,7 +8,6 @@ import requests
 import socket
 import json
 from time import sleep, time
-
 NUM_PORTS = 65536
 ELGATO_PORT = 9123
 
@@ -196,18 +195,18 @@ class LightStrip:
         sleep(TIMEOUT)      # this is not a rolling admission... I could rework it to be that way, and it might be smarter to do that
         browser.cancel()    # however right now this works just fine. In theory it will lose connection to the lights if they get assigned to a new IP
                             # but in that case I am going to assume it is because the network bounces, which means this function will get called again anyways
-        print("Lights:")
+        # print("Lights:")
         for service in listener.get_services():
-            #print("name", service.get_name())
-            #print("properties:", service.properties)
-            #print("port", service.port)
             for addr in service.addresses:
-                #print("address:", socket.inet_ntoa(addr))
-                prospect_light = LightStrip(socket.inet_ntoa(addr), service.port, service.get_name())
-                # TODO add support for Key Lights
-                if 'Strip' in prospect_light.info['productName']:
-                    print(f"\tadding light strip: {prospect_light.info['displayName']}")
-                    lightstrips.append(prospect_light)
+                try:
+                    prospect_light = LightStrip(socket.inet_ntoa(addr), service.port, service.get_name())
+                    # TODO add support for Key Lights
+                    if 'Strip' in prospect_light.info['productName']:
+                        # print(f"\tadding light strip: {prospect_light.info['displayName']}")
+                        lightstrips.append(prospect_light)
+                except Exception:
+                    pass
+                    # print("Failed to connect to light")
 
         return lightstrips
 
@@ -446,7 +445,7 @@ class LightStrip:
             wait_time_ms += durationMs + transitionMs
         # update the light with the new scene
         self.update_scene_data(self.scene, scene_name=name, scene_id=scene_id)
-        light_status = self.set_strip_data(self.data)
+        self.set_strip_data(self.data)
         # return the wait time
         return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
 

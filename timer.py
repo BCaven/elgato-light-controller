@@ -37,7 +37,6 @@ class Timer:
             datetime.now().strftime('%w-%m-%y-%H%M').split('-'))
         time = int(time)
         # TODO: write check for rules
-        print("real time:", time, "activation time:", self.activation_time)
         return time == self.activation_time and not self.activated
 
     def get_transition(self):
