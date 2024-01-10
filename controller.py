@@ -275,6 +275,11 @@ def main():
     current_hash = check_file(TIMER_FILE, "", MODE=MODE, output_file=LOG_FILE)
     # get all the timers
     timers = get_timers(TIMER_FILE)
+    log("timers:", MODE=MODE, output_file=LOG_FILE)
+    for timer in timers:
+        log(f"time: {timer.activation_time}", MODE, LOG_FILE)
+        log(f"transition scene: {timer.transition_scene}", MODE, LOG_FILE)
+        log(f"end scene: {timer.end_scene}", MODE, LOG_FILE)
     # TODO: sort the timers
     room = Room()
     assert room.setup(), "Failed to set up room"
@@ -285,8 +290,7 @@ def main():
         [light.info['displayName'] for light in room.lights])
     log(light_names, MODE, LOG_FILE)
 
-    times = ",".join([str(t.get_activation_time()) for t in timers])
-    log(f"timers: {times}", MODE=MODE, output_file=LOG_FILE)
+
     try:
         while True:
             assert timers, "Timer list is empty"
@@ -322,7 +326,7 @@ def main():
             # and repeat the process
     except Exception as e:
         log("Caught exception:", MODE, LOG_FILE)
-        log(e, MODE, LOG_FILE)
+        log(str(e), MODE, LOG_FILE)
         log("Exiting program...", MODE, LOG_FILE)
         sys.exit(1)
 
