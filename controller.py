@@ -13,10 +13,12 @@ from time import sleep
 import sys
 import subprocess
 from os.path import isfile
+from datetime import datetime
 
 
 def usage(status):
     """Output a help statement for the program."""
+    pass
     print("""
 Elgato Light Controller
     USAGE python3 controller.py [FLAGS]
@@ -47,13 +49,17 @@ def parse_rules(rules: list) -> list:
                 if next_token == ')':
                     break
             if mini_rules[-1] != ')':
-                print("failed to find closing paren")
-                print("buffer", mini_rules)
+                pass
+# print("failed to find closing paren")
+                pass
+# print("buffer", mini_rules)
                 return []
             new_token = parse_rules(mini_rules)
             if len(new_token) != 1:
-                print("parser returned a list of length != 1 when parsing parens")
-                print("returned token:", new_token)
+                pass
+# print("parser returned a list of length != 1 when parsing parens")
+                pass
+# print("returned token:", new_token)
                 return []
             rules.insert(index, new_token[0])  # insert the new token in the index of the open paren
         elif current_token == '&':
@@ -65,7 +71,8 @@ def parse_rules(rules: list) -> list:
                 rules.pop(index)  # remove the second val
                 index -= 1
             except Exception:
-                print("failed to apply &")
+                pass
+# print("failed to apply &")
                 return []
         elif current_token == '|':
             # grab the previous and next tokens and compute the new value
@@ -76,7 +83,8 @@ def parse_rules(rules: list) -> list:
                 rules.pop(index)  # remove the second val
                 index -= 1
             except Exception:
-                print("failed to apply |")
+                pass
+# print("failed to apply |")
                 return []
             pass
         elif current_token == '-':
@@ -91,7 +99,8 @@ def parse_rules(rules: list) -> list:
                 # could do a white mask shifted left to the smart & white mask shift left to end of the end range
                 # PROBLEM: that would get really weird with days of the week because they do not have a designated "start" and "stop"
             except Exception:
-                print("failed to calculate range at index", index)
+                pass
+# print("failed to calculate range at index", index)
                 return []
         else:
             # hit a val token
@@ -163,7 +172,8 @@ def get_timers(timer_file,
                         int(scene_element[3]),
                         int(scene_element[4])))
                 except Exception:
-                    print("failed to parse scene element:", scene_element)
+                    pass
+# print("failed to parse scene element:", scene_element)
                     return timers
 
             # fifth thing: end state
@@ -179,7 +189,8 @@ def get_timers(timer_file,
                         int(scene_element[3]),
                         int(scene_element[4])))
                 except Exception:
-                    print("failed to parse scene element:", scene_element)
+                    pass
+# print("failed to parse scene element:", scene_element)
                     return timers
             timers.append(Timer(
                 year_range=raw_year,
@@ -212,8 +223,11 @@ def check_file(
 def log(message, MODE="quiet", output_file: str = "stdout"):
     """Log the message in the appropriate place."""
     if MODE != "quiet":
+        now = datetime.now().strftime('%H%M')
+        message = now + message
         if MODE == "stdout" or output_file == "stdout":
-            print(message)
+            pass
+            # print(message)
         else:
             if not isfile(output_file):
                 create = open(output_file, 'w')
@@ -289,7 +303,6 @@ def main():
     light_names = ", ".join(
         [light.info['displayName'] for light in room.lights])
     log(light_names, MODE, LOG_FILE)
-
 
     try:
         while True:

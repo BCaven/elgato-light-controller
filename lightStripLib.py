@@ -30,7 +30,7 @@ class ServiceListener:
 
     def update_service(self, zeroconf, type, name):
         """Update a service."""
-        print("update was called")
+        # print("update was called")
         # info = zeroconf.get_service_info(type, name)
         # index = self.services.index(info)
         # self.services[index] =
