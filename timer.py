@@ -37,7 +37,7 @@ class Timer:
             datetime.now().strftime('%w-%m-%y-%H%M').split('-'))
         time = int(time)
         # TODO: write check for rules
-        return time == self.activation_time and not self.activated
+        return time == self.activation_time  # and not self.activated
 
     def get_transition(self):
         """Return transition scene and end scene."""

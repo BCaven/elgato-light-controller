@@ -324,7 +324,7 @@ def main():
                             [light.info['displayName'] for light in room.lights])
                         log(light_names, MODE, LOG_FILE)
 
-                    timer.activated = True
+                    # timer.activated = True
                     log(f"\t{timer.get_activation_time()} - Activated",
                         MODE, LOG_FILE)
 
