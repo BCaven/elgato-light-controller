@@ -13,6 +13,7 @@ def main():
         print("light:")
         print(light.data)
 
+    return
     transition = [ # NOTE: these are the normal yellow/reds
         #(34.0, 69.0, 100, 1000, 5000),
         #(26.0, 98.0, 100, 0, 1000),
