@@ -125,82 +125,51 @@ def generate_date_mask(date: int, leap: bool = False) -> int:
     return int(mask, 2)
 
 
-def parse_rules(rules: list) -> list:
+def parse_rules(rules: list,
+                allowed_symbols: list = ["(", ")", "|", "-", "&"]
+                ) -> list:
     """
     Parse the rules of a timer.
 
     PROBLEM: calendar does not start on same day, each month is a different length, etc
+
+    this method is recursive
     """
-    index = 0
-    while rules:
-        current_token = rules[index]
-        if current_token == '(':
-            # grab everything until you reach a ')' and run it through `parse_rules` put the output value in the index of the open paren
-            mini_rules = [current_token]
-            while rules:
-                next_token = rules.pop(index)
-                mini_rules.append(next_token)
-                if next_token == ')':
-                    break
-            if mini_rules[-1] != ')':
-                pass
-# print("failed to find closing paren")
-                pass
-# print("buffer", mini_rules)
-                return []
-            new_token = parse_rules(mini_rules)
-            if len(new_token) != 1:
-                pass
-# print("parser returned a list of length != 1 when parsing parens")
-                pass
-# print("returned token:", new_token)
-                return []
-            rules.insert(index, new_token[0])  # insert the new token in the index of the open paren
-        elif current_token == '&':
-            # grab the previous and next tokens and compute the new value
-            try:
-                new_val = rules[index-1] & rules[index+1]
-                rules[index - 1] = new_val  # make the prev val the output of the &
-                rules.pop(index)  # remove the '&' token
-                rules.pop(index)  # remove the second val
-                index -= 1
-            except Exception:
-                pass
-# print("failed to apply &")
-                return []
-        elif current_token == '|':
-            # grab the previous and next tokens and compute the new value
-            try:
-                new_val = rules[index-1] | rules[index+1]
-                rules[index - 1] = new_val  # make the prev val the output of the |
-                rules.pop(index)  # remove the '|' token
-                rules.pop(index)  # remove the second val
-                index -= 1
-            except Exception:
-                pass
-# print("failed to apply |")
-                return []
-            pass
-        elif current_token == '-':
-            # calc range
-            try:
-                start_range = rules[index - 1]
-                end_range = rules[index + 1]
-                # all of the bits between start_range and end_range should be one
-                # find the index of the highest bit of the start of the range and
-                # the index of the lowest bit of the end of the range
+    if len(rules) <= 1:
+        return rules[0]
+    next_token = rules.pop(0)
+    # deal with parens
+    if next_token == '(':
+        # pop until you reach a close paren and feed that entire thing into
+        # a separate parse_rules loop
+        # PROBLEM: deal with nested parens
+        subrules = []
+        subdepth = 0
+        subtoken = rules.pop(0)
+        while subtoken != ")" and subdepth == 0:
+            if subtoken == "(":
+                subdepth += 1
+            elif subtoken == ")":
+                subdepth -= 1
 
-                # could do a white mask shifted left to the smart & white mask shift left to end of the end range
-                # PROBLEM: that would get really weird with days of the week because they do not have a designated "start" and "stop"
-            except Exception:
-                pass
-# print("failed to calculate range at index", index)
-                return []
-        else:
-            # hit a val token
-            # Do not know if you actually need to do anything with these
-            pass
+            # add current subtoken to subrules
+            if subtoken != ")" and subdepth == 0:
+                subrules.append(subtoken)
+            # pop next subtoken
+            subtoken = rules.pop(0)
 
+        # send the subrules off to a new `parse_rules` instance
+        new_token = parse_rules(subrules)
+        assert len(new_token) == 1, f"Subparser failed to parse to single value. Returned array: {new_token}"
+        new_token = new_token[0]
+        assert new_token is int, f"Token is not an int: {new_token}"
+        # push the generated token to the front of the rule list
+        rules.insert(0, new_token)
+
+    elif next_token in allowed_symbols:
+        pass
+
+    return parse_rules(rules, allowed_symbols)
 
 def get_timers(timer_file,
                MODE="quiet",
