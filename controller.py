@@ -165,8 +165,7 @@ def log(message, MODE="quiet", output_file: str = "stdout"):
         now = datetime.now().strftime('%H%M')
         message = now + message
         if MODE == "stdout" or output_file == "stdout":
-            pass
-            # print(message)
+            print(message)
         else:
             if not isfile(output_file):
                 create = open(output_file, 'w')
