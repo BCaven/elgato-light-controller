@@ -163,7 +163,7 @@ def log(message, MODE="quiet", output_file: str = "stdout"):
     """Log the message in the appropriate place."""
     if MODE != "quiet":
         now = datetime.now().strftime('%H%M')
-        message = now + message
+        message = now + " : " + message
         if MODE == "stdout" or output_file == "stdout":
             print(message)
         else:
