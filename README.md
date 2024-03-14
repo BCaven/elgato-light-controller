@@ -2,8 +2,6 @@
 
 ---
 
-`version 1.0`
-
 Controller for elgato light strips
 
 The controller reads a list of timers and executes them at the specified time
@@ -20,9 +18,9 @@ it was built for a raspberry pi.
 
 ### Using the controller:
 
-The controller looks for transitions in the file `light.transition` 
+The controller looks for transitions in the file `light.transition` unless otherwise specified.
 
-Each line is a timer of the following format: `time,lights,color1,color2,color3...,colorN`
+Each line is a timer of the following format: `__,__,time,lights,transition,end`
 
 `time` is 24 hour time in the format `HHMM`
 
@@ -32,11 +30,15 @@ an example of this is `192.168.86.0.1|123.123.13.1.1`
 
 if `lights` is left blank, the controller will run the transition on all lights.
 
-each `color` is formatted as `hue|saturation|brightness|duration of color|duration of transition to next color`
+`transition` and `end` are sets of colors in the following format: `hue|saturation|brightness|duration of color|duration of transition to next color`
+
+each color is separated by a `;`
 
 Both the duration time and transition time are in MS.
 
 hue, saturation, and brightness are `float`s, both times are `int`s.
+
+The first two slots regard features that are still in progress, so they can be left blank because their values have no impact on the controller.
 
 In this release, the transition file can only be modified manually; however, there is no need to restart the controller when modifying the transition file because the controller will automatically reload the file.
 
