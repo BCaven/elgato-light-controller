@@ -1,10 +1,19 @@
 """
-parse_re.py
+parse_rules
 
-CP 2 Part 1
-Parse a regular expression and return a syntax tree
+parse the rules for timer activation
+
+operations: concat (bit and), union (bit or), range
+types: month, day, weekday
+
+
+ranges
+must be between symbols of the same type
+TODO: decide if ranges should be able to wrap around or be incomplete
+
 """
 import sys
+from timer import MONTH_LENGTH, WEEKDAYS
 
 # rules structured as below, pop, read, next, push
 # below and next are sets, pop, read, and push are strings
@@ -49,20 +58,21 @@ class Node:
 # if the popped item is a str, just treat it as normal
 # if the popped item is a Node, just make sure the popped type is also a Node
 # in these rules, 'a' is any char that isnt a reserved symbol
-RESERVED_SYMBOLS = {'(', ')', '|', '*', '⊣', '$'}
+RESERVED_SYMBOLS = {'(', ')', '|', '⊣', '$'}
 RULES = [
     # rules for reading input
+    # TODO: need to make a rule to combine characters into strings
     [{'$', '(', '|', Node(cfg_type='T')}, ['&'], 'a', set(), 'a'], # a, & -> a for a in E
     [{'$', '(', '|', Node(cfg_type='T')}, ['&'], '(', set(), '('], # (, & -> (
     [{Node(cfg_type='E')}, ['&'], ')', set(), ')'], # ), & -> )
     [{Node(cfg_type='E')}, ['&'], '|', set(), '|'], # |, & -> |
 #    [{Node(cfg_type='P')}, ['&'], '*', set(), '*'], # *, & -> *
     # rules for converting input to nodes
-    [set(), [Node(cfg_type='E'), '|', Node(cfg_type='M')], '&', set(), Node('union', cfg_type='E')], # ε, E|M → E
+    [set(), [Node(cfg_type='E'), '|', Node(cfg_type='M')], '&', set(), Node('and', cfg_type='E')], # ε, E|M → E
     [{'$', '('}, [Node(cfg_type='M')], '&', set(), Node(cfg_type='E')], # ε, M → E
     [{'$', '(', '|'}, ['&'], '&', {'|', ')', '⊣'}, Node('epsilon', cfg_type='M')], # ε, ε → M
     [set(), [Node(cfg_type='T')], '&', {'|', ')', '⊣'}, Node(cfg_type='M')], # ε,T → M
-    [set(), [Node(cfg_type='T'), Node(cfg_type='F')], '&', set(), Node('concat', cfg_type='T')], # ε,TF → T
+    [set(), [Node(cfg_type='T'), Node(cfg_type='F')], '&', set(), Node('or', cfg_type='T')], # ε,TF → T
     [{'$', '(', '|'}, [Node(cfg_type='F')], '&', set(), Node(cfg_type='T')], # ε, F → T
 #    [set(), [Node(cfg_type='P'), '*'], '&', set(), Node('star', cfg_type='F')], # ε, P* → F
     # next character cannot be a star
@@ -147,7 +157,7 @@ def check_rule(rule, stack, input_str) -> bool:
     # none of the checks failed so the rule applies
     return True
 
-def parser(regex: str):
+def parser(regex: list):
     """
     basic approach:
         List of transitions are all possible transitions.
@@ -156,7 +166,7 @@ def parser(regex: str):
     """
     remaining_input = ['⊣']
     if len(regex) > 0:
-        remaining_input = list(regex + '⊣') if regex[-1] != '⊣' else list(regex)
+        remaining_input = list(regex + ['⊣']) if regex[-1] != '⊣' else list(regex)
     stack = ['$']
     # when the stack does not change, it means we have an invalid regex (because we should always follow exactly one rule)
     a_rule_was_followed = True
@@ -222,11 +232,37 @@ def parser(regex: str):
                     new_node.operation = popped_from_stack[0].operation
                     new_node.parameters = popped_from_stack[0].parameters
                 else:
-                    new_node.operation = push_token.operation
-                    if push_token.operation == 'epsilon':
-                        new_node.parameters = ['&']
+                    if push_token.operation == "symbol":
+                        # need further parsing
+                        assert len(popped_from_stack) == 1, f"only one item was suppoed to be popped for symbol parsing, but found: {popped_from_stack}"
+                        assert type(popped_from_stack[0]) is str, f"was supposed to pop a string to parse into a symbol but instead found: {popped_from_stack}"
+                        token = popped_from_stack[0]
+                        # months are the month abreviation
+                        if token in MONTH_LENGTH:
+                            # it is a month
+                            new_node.operation = 'month'
+                            new_node.parameters = popped_from_stack
+                        elif token in WEEKDAYS:
+                            new_node.operation = 'weekday'
+                            new_node.parameters = popped_from_stack
+                        elif token[0] == 'd':
+                            new_node.operation = 'date'
+                            new_node.parameters = [token[1:]]
+                        elif token[0] == 'h':
+                            new_node.operation = 'hour'
+                            new_node.parameters = [token[1:]]
+                        elif token[0] == 'm':
+                            new_node.operation = 'minute'
+                            new_node.parameters = [token[1:]]
+                        else:
+                            raise ValueError(f"failed to parse symbol: {token}")
+                        
                     else:
-                        new_node.parameters = popped_from_stack
+                        new_node.operation = push_token.operation
+                        if push_token.operation == 'epsilon':
+                            new_node.parameters = ['&']
+                        else:
+                            new_node.parameters = popped_from_stack
                 assert new_node.operation != 'NONE', f"trying to push malformed node to stack - no operation"
                 assert new_node.parameters != [], f"trying to push malformed node to stack - no parameters"
                 stack.append(new_node)
@@ -251,7 +287,7 @@ def main():
     args = sys.argv[1:]
     if len(args) != 1:
         raise RuntimeError(f"Incorrect number of arguments.\nExpected 1, got {len(args)}")
-    print(parser(args[0]))
+    print(parser(args[0].split(" ")))
 
 
 if __name__ == "__main__":
