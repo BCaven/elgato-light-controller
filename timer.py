@@ -235,3 +235,7 @@ class Timer:
     def is_activated(self):
         """Return bool if activated."""
         return self.activated
+    
+    def get_end_scene(self):
+        """Return the end scene."""
+        return self.end_scene
