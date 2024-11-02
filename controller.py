@@ -143,7 +143,6 @@ def parse_args():
     LOG_FILE = "controller.log"
     TIMER_FILE = "light.transition"
     EXPECTED_NUM_LIGHTS = 3
-    QUIET = False
     # parse args
     arguments = sys.argv[1:]
     while arguments:
@@ -157,8 +156,7 @@ def parse_args():
                 logger.error("Failed to parse arguments")
                 usage(1)
         elif arg == '-q':
-            logging.getLogger().setLevel(logging.ERROR)
-            QUIET = True
+            logging.disable()
         elif arg == '-t':
             try:
                 TIMER_FILE = arguments.pop(0)
@@ -174,7 +172,7 @@ def parse_args():
         else:
             usage(1)
 
-    return (LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS, QUIET)
+    return (LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS)
 
 def main():
     """
@@ -184,10 +182,8 @@ def main():
     """
     # Set up file handler for logging
 
-    LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS, QUIET = parse_args()
+    LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS = parse_args()
     
-    if QUIET:
-        logging.disable()
     file_handler = logging.FileHandler(LOG_FILE)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
