@@ -9,12 +9,11 @@ Use cron or equivalent to have this program automatically run at startup
 """
 from lightStripLib import Room
 from timer import Timer
-from time import sleep
 import sys
 import subprocess
-from os.path import isfile
-from datetime import datetime
 import logging
+import asyncio
+from time import sleep
 
 WINDOWS = sys.platform == "win32"
 
@@ -175,7 +174,6 @@ def parse_args():
 
     return (LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS)
 
-
 def main():
     """
     Run the main driver for program.
@@ -187,10 +185,15 @@ def main():
     
     # Set up file handler for logging
     file_handler = logging.FileHandler(LOG_FILE)
-    file_handler.setLevel(logging.INFO)
+    file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    logging.getLogger().addHandler(file_handler)
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG)
+    console.setFormatter(formatter)
+    logging.getLogger().addHandler(console)
+    logging.getLogger().setLevel(logging.DEBUG)
 
     # get hash
     current_hash = check_file(TIMER_FILE, "")
@@ -203,44 +206,19 @@ def main():
     # TODO: sort the timers
     room = Room()
     assert room.setup(), "Failed to set up room"
-    if EXPECTED_NUM_LIGHTS > len(room.lights):
-        room.setup()
     logger.info("Lights: %s", ", ".join([light.info['displayName'] for light in room.lights]))
-    last_timer_update = {
-        light.addr: None for light in room.lights
-    }
     while True:
         if not timers:
             raise ValueError("Timer list is empty")
 
-        old_light_ips = {light.addr for light in room.lights}
-        room.check_for_new_lights()
-        new_light_ips = {light.addr for light in room.lights}
-        if old_light_ips != new_light_ips:
-            logger.info("New lights: %s", ", ".join([light.info['displayName'] for light in room.lights]))
-        
-        # Check if one of the times in last_timer_update is different from the others
-        unique_times = set(last_timer_update.values())
-        if len(unique_times) > 1:
-            logger.info("Detected different timer updates: %s", unique_times)
-            # Find the most common time
-            most_common_time = max(unique_times, key=lambda t: list(last_timer_update.values()).count(t))
-            # Update the lights with the different time to match the most common time
-            for light, update_time in last_timer_update.items():
-                if update_time != most_common_time:
-                    most_common_timer = next(timer for timer in timers if timer.get_activation_time() == most_common_time)
-                    end_scene = most_common_timer.get_end_scene()
-                    light.transition_end(end_scene)
-                    last_timer_update[light] = most_common_time
-                    logger.info("Updated light %s to end scene of the most common timer time: %s", light, most_common_time)
+        room.cleanup_inactive_services()
 
         for timer in timers:
             if timer.check_timer():
                 transition_scene, end_scene = timer.get_transition()
-                for addr in room.room_transition_threaded(
+                room.room_transition_threaded(
                     transition_scene,
-                    end_scene=end_scene):
-                    last_timer_update[addr] = timer.get_activation_time()
+                    end_scene=end_scene)
                 logger.info("\t%s - Activated", timer.get_activation_time())
 
         sleep(60)
@@ -255,4 +233,5 @@ def main():
 
 
 if __name__ == "__main__":
+    #asyncio.run(main())
     main()

@@ -17,72 +17,56 @@ ELGATO_PORT = 9123
 import logging
 
 from zeroconf import ServiceListener
-
+# TODO: fix bug where listener crashes when a light is removed
 class LightServiceListener(ServiceListener):
-    """Listener for Zeroconf to keep track of active lights."""
+    """
+    Listener for Zeroconf to keep track of active lights.
+    Abusing passing by reference to keep track of active lights.
+    """
 
-    def __init__(self):
+    def __init__(self, light_dict: dict):
         """Initialize the listener."""
-        self.active_lights = {}
         self.log = logging.getLogger(__name__)
+        self.log.info("Initializing LightServiceListener")
+        self.light_dict = light_dict
 
     def remove_service(self, zeroconf, type, name):
-        """Remove a service."""
-        if name in self.active_lights:
-            del self.active_lights[name]
-            self.log.info(f"Removed light service: {name}")
+        """
+        Remove a service.
+        
+        Of course, the default timeout for this (when something is unplugged)
+        is an hour
+        TODO: change that timeout
+
+        Right now, I am just deleting the light from the service dict in
+        Room.check_for_new_lights()
+        """
+        if name in self.light_dict:
+            try:
+                del self.light_dict[name]
+                self.log.critical(f"Removed light service: {name}")
+            except Exception as e:
+                self.log.error(f"Failed to remove light service: {e}")
 
     def update_service(self, zeroconf, type, name):
         """Update a service."""
         info = zeroconf.get_service_info(type, name)
         if info:
-            self.active_lights[name] = info
-            self.log.info(f"Updated light service: {name}")
+            self.light_dict[name] = info
+            self.log.critical(f"Updated light service: {name}")
 
     def add_service(self, zeroconf, type, name):
         """Add a service to the list."""
         info = zeroconf.get_service_info(type, name)
         if info:
-            self.active_lights[name] = info
-            self.log.info(f"Added light service: {name}")
+            self.light_dict[name] = info
+            self.log.critical(f"Added light service: {name}")
 
     def get_active_lights(self):
         """Return the active lights."""
-        return self.active_lights
+        self.log.info(f"Returning active lights: {self.light_dict}")
+        return self.light_dict
 
-
-
-class ServiceListener:
-    """Listener for Zeroconf."""
-
-    def __init__(self):
-        """Init the listener."""
-        self.services = []
-        self.log = logging.getLogger(__name__)
-
-    def get_services(self):
-        """Return the services."""
-        return self.services
-
-    def remove_service(self, zeroconf, type, name):
-        """Remove a service."""
-        info = zeroconf.get_service_info(type, name)
-        #self.services.remove(info)
-        self.log.info(f"Removing service: {name}")
-
-    def update_service(self, zeroconf, type, name):
-        """Update a service."""
-        self.log.info(f"Updating service: {name}")
-        # logging.debug("update was called")
-        # info = zeroconf.get_service_info(type, name)
-        # index = self.services.index(info)
-        # self.services[index] =
-
-    def add_service(self, zeroconf, type, name):
-        """Add a service to the list."""
-        self.log.info(f"Adding service: {name}")
-        info = zeroconf.get_service_info(type, name)
-        #self.services.append(info)
 
 class Scene:
     """
@@ -109,7 +93,7 @@ class Scene:
             if not isinstance(item, dict):
                 self.log.warning(f"TypeError: item: {item} is type: {type(item)} not type: dict")
                 raise ValueError(f"Input scene item must be a dictionary, got {type(item)}")
-        self.data = input_scene.copy()
+        self.data = [] if not input_scene else input_scene.copy()
 
     def add_scene(self, hue, saturation, brightness, durationMs, transitionMs):
         """Add an item to the end of the list."""
@@ -386,7 +370,7 @@ class LightStrip:
     def transition_start(self,
                          colors: list,
                          name='transition-scene',
-                         scene_id='transition-scene-id') -> tuple[int, bool]:
+                         scene_id='transition-scene-id') -> int:
         """
         Non-blocking for running multiple scenes.
 
@@ -426,7 +410,10 @@ class LightStrip:
         self.update_scene_data(self.scene, scene_name=name, scene_id=scene_id)
         self.set_strip_data(self.data)
         # return the wait time
-        return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
+        if len(colors) > 1:
+            return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
+        else:
+            return wait_time_ms / 1000  # Return full wait time for single-color scenes
 
     def transition_end(self,
                        end_scene: list,
@@ -476,6 +463,7 @@ class Room:
         if not isinstance(lights, list):
             raise ValueError(f"TypeError: {lights} is type: {type(lights)} not type: list")
         self.lights: list[LightStrip] = lights
+        self.service_dict = dict()
         self.log = logging.getLogger(__name__)
     
     def find_light_strips_zeroconf(service_type='_elg._tcp.local.', TIMEOUT=15):
@@ -496,23 +484,23 @@ class Room:
         lightstrips = []
 
         zc = zeroconf.Zeroconf()
-        listener = ServiceListener()
+        service_dict = dict()
+        listener = LightServiceListener(service_dict)
         browser = zeroconf.ServiceBrowser(zc, service_type, listener)
         sleep(TIMEOUT)
         browser.cancel()
-        for service in listener.get_services():
-            for addr in service.addresses:
+        new_lights = []
+        for name, info in listener.get_active_lights().items():
+            for addr in info.addresses:
                 try:
-                    prospect_light = LightStrip(socket.inet_ntoa(addr), service.port, service.get_name())
-                    # TODO add support for Key Lights
+                    prospect_light = LightStrip(socket.inet_ntoa(addr), info.port, name)
                     if 'Strip' in prospect_light.info['productName']:
-                        # self.log.debug(f"\tadding light strip: {prospect_light.info['displayName']}")
-                        lightstrips.append(prospect_light)
-                except Exception:
-                    pass
-                    # self.log.debug("Failed to connect to light")
-
-        return lightstrips
+                        new_lights.append(prospect_light)
+                        logging.getLogger(__name__).info(f"Found new light strip: {prospect_light.info['displayName']}")
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to connect to light: {e}")
+        return new_lights
+        
 
     def start_rolling_admission_zeroconf( 
             self, service_type='_elg._tcp.local.', timeout=15):
@@ -525,7 +513,7 @@ class Room:
         self.log.info("Starting rolling admission for Zeroconf")
         self.zeroconf = zeroconf.Zeroconf()
         self.service_type = service_type
-        self.listener = LightServiceListener()
+        self.listener = LightServiceListener(self.service_dict)
         self.browser = zeroconf.ServiceBrowser(self.zeroconf, self.service_type, self.listener)
         sleep(timeout)
 
@@ -541,7 +529,8 @@ class Room:
     def check_for_new_lights(self):
         """Check for new lights and add them to the list."""
         new_lights = []
-        for name, info in self.listener.get_active_lights().items():
+        self.log.info("Checking for new lights")
+        for name, info in self.service_dict.items():
             for addr in info.addresses:
                 try:
                     prospect_light = LightStrip(socket.inet_ntoa(addr), info.port, name)
@@ -550,9 +539,18 @@ class Room:
                         self.log.info(f"Found new light strip: {prospect_light.info['displayName']}")
                 except Exception as e:
                     self.log.error(f"Failed to connect to light: {e}")
-                    return False
         self.lights = new_lights
         return True
+
+    def cleanup_inactive_services(self):
+        """Remove inactive services from the list of lights."""
+        active_lights = set(self.service_dict.keys())
+        # if we have new lights, add them to self.lights
+        if active_lights - set(light.name for light in self.lights):
+            self.log.info("Found new lights, checking for them")
+            self.check_for_new_lights()
+        self.log.info("Cleaning up inactive services %s", set(light.name for light in self.lights if light.name not in active_lights))
+        self.lights = [light for light in self.lights if light.name in active_lights]
 
     def setup(self, service_type='_elg._tcp.local.'):
         """Find all the lights."""
@@ -592,17 +590,16 @@ class Room:
         """
         Non-blocking transition for all room lights using a thread pool.
 
-        Returns True if all transitions were successful, False otherwise.
-
-        BUG: the color list is copied between lights, so the scene gets duplicated for each light
-        TODO: send deep copy of colors to each light
+        Returns tuple of successful names
         """
         if not colors:
             self.log.warning("Cannot transition an empty scene")
             return False
 
         def process_light_transition(light: LightStrip):
+            assert type(light) is LightStrip, f"TypeError: {light} is type: {type(light)} not type: LightStrip"
             sleep_time = light.transition_start(colors.copy(), name, scene_id)
+            self.log.info(f"Sleep time: {sleep_time}")
             sleep(sleep_time)
             transition_status = light.transition_end(end_scene, end_scene_name, end_scene_id)
             return transition_status
@@ -613,8 +610,8 @@ class Room:
             results = []
             for future in as_completed(futures):
                 results.append(future.result())
-        successful_ips = [light.addr for light, result in zip(self.lights, results) if result]
-        return tuple(successful_ips)
+        successful_lights = [light.name for light, result in zip(self.lights, results) if result]
+        return tuple(successful_lights)
 
     def room_transition(self,
                         colors: list,
@@ -691,3 +688,4 @@ class Room:
                 times.append((light, sleep_time, start_time))
 
         return
+
