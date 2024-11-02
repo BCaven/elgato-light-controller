@@ -9,33 +9,20 @@ Use cron or equivalent to have this program automatically run at startup
 """
 from lightStripLib import Room
 from timer import Timer
-from time import sleep
 import sys
 import subprocess
-from os.path import isfile
-from datetime import datetime
+import logging
+import asyncio
+from time import sleep
 
-# TODO: fill in bitmasks
-MONTH_LENGTH = {
-    "january": 31,
-    "feburary": 28,
-    "feburary-leap": 29,
-    "march": 31,
-    "april": 30,
-    "may": 31,
-    "june": 30,
-    "july": 31,
-    "august": 31,
-    "september": 30,
-    "october": 31,
-    "november": 30,
-    "december": 31
-}
+WINDOWS = sys.platform == "win32"
 
+# Set up logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 def usage(status):
     """Output a help statement for the program."""
-    pass
     print("""
 Elgato Light Controller
     USAGE python3 controller.py [FLAGS]
@@ -48,9 +35,7 @@ Elgato Light Controller
     sys.exit(status)
 
 
-def get_timers(timer_file,
-               MODE="quiet",
-               LOG_FILE="stdout"):
+def get_timers(timer_file):
     """
     Return a list of timers.
 
@@ -93,7 +78,7 @@ def get_timers(timer_file,
             try:
                 activation_time = int(raw_input.pop(0))
             except Exception:
-                log("Failed to parse activation time", MODE, LOG_FILE)
+                logger.error("Failed to parse activation time")
 
             # fourth thing: lights
             lights = raw_input.pop(0)
@@ -111,8 +96,7 @@ def get_timers(timer_file,
                         int(scene_element[3]),
                         int(scene_element[4])))
                 except Exception:
-                    pass
-# print("failed to parse scene element:", scene_element)
+                    logger.error("Failed to parse scene element")
                     return timers
 
             # fifth thing: end state
@@ -128,8 +112,7 @@ def get_timers(timer_file,
                         int(scene_element[3]),
                         int(scene_element[4])))
                 except Exception:
-                    pass
-# print("failed to parse scene element:", scene_element)
+                    logger.error("Failed to parse scene element")
                     return timers
             timers.append(Timer(
                 year_range=raw_year,
@@ -142,44 +125,21 @@ def get_timers(timer_file,
     return timers
 
 
-def check_file(
-        filename: str,
-        old_hash: str,
-        MODE="quiet",
-        output_file: str = "stdout") -> bool:
+def check_file(filename: str, old_hash: str) -> str:
     """Check if a file changed."""
+    if WINDOWS:
+        logging.warning("Windows not supported")
+        return old_hash
     new_hash = subprocess.run(
         ['md5sum', filename.encode('utf-8')],
         stdout=subprocess.PIPE).stdout.decode('utf-8')
     if old_hash != new_hash:
-        log(
-            "checking for timers.",
-            MODE,
-            output_file)
+        logger.info("Checking for timers.")
     return new_hash
-
-
-def log(message, MODE="quiet", output_file: str = "stdout"):
-    """Log the message in the appropriate place."""
-    if MODE != "quiet":
-        now = datetime.now().strftime('%H%M')
-        message = now + " : " + message
-        if MODE == "stdout" or output_file == "stdout":
-            print(message)
-        else:
-            if not isfile(output_file):
-                create = open(output_file, 'w')
-                create.write("")
-                create.close()
-            out = open(output_file, 'a')
-            message = message + "\n"
-            out.write(message)
-            out.close()
 
 
 def parse_args():
     """Return variables."""
-    MODE = "verbose"
     LOG_FILE = "controller.log"
     TIMER_FILE = "light.transition"
     EXPECTED_NUM_LIGHTS = 3
@@ -193,27 +153,26 @@ def parse_args():
             try:
                 LOG_FILE = arguments.pop(0)
             except Exception:
-                log("Failed to parse arguments", MODE="stdout")
+                logger.error("Failed to parse arguments")
                 usage(1)
         elif arg == '-q':
-            MODE = "quiet"
+            logger.setLevel(logging.ERROR)
         elif arg == '-t':
             try:
                 TIMER_FILE = arguments.pop(0)
             except Exception:
-                log("Failed to parse new TIMER_FILE", MODE="stdout")
+                logger.error("Failed to parse new TIMER_FILE")
                 usage(1)
         elif arg == '-n':
             try:
                 EXPECTED_NUM_LIGHTS = int(arguments.pop(0))
             except Exception:
-                log("Failed to parse number of expected lights", MODE="stdout")
+                logger.error("Failed to parse number of expected lights")
                 usage(1)
         else:
             usage(1)
 
-    return (MODE, LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS)
-
+    return (LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS)
 
 def main():
     """
@@ -222,65 +181,57 @@ def main():
     TODO: make this survive a network failure or change in IP addr
     TODO: script that checks for updates to the main branch and relaunches the controller
     """
-    MODE, LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS = parse_args()
+    LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS = parse_args()
+    
+    # Set up file handler for logging
+    file_handler = logging.FileHandler(LOG_FILE)
+    file_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    logging.getLogger().addHandler(file_handler)
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG)
+    console.setFormatter(formatter)
+    logging.getLogger().addHandler(console)
+    logging.getLogger().setLevel(logging.DEBUG)
+
     # get hash
-    current_hash = check_file(TIMER_FILE, "", MODE=MODE, output_file=LOG_FILE)
+    current_hash = check_file(TIMER_FILE, "")
     # get all the timers
     timers = get_timers(TIMER_FILE)
-    log("timers:", MODE=MODE, output_file=LOG_FILE)
+    logger.info("Timers:")
     for timer in timers:
-        log(f"time: {timer.activation_time}", MODE, LOG_FILE)
-        log(f"transition scene: {timer.transition_scene}", MODE, LOG_FILE)
-        log(f"end scene: {timer.end_scene}", MODE, LOG_FILE)
+        logger.info("Time: %s, Transition scene: %s, End scene: %s", 
+                    timer.activation_time, timer.transition_scene, timer.end_scene)
     # TODO: sort the timers
     room = Room()
     assert room.setup(), "Failed to set up room"
-    if EXPECTED_NUM_LIGHTS > len(room.lights):
-        room.setup()
-    log("Lights:", MODE, LOG_FILE)
-    light_names = ", ".join(
-        [light.info['displayName'] for light in room.lights])
-    log(light_names, MODE, LOG_FILE)
+    logger.info("Lights: %s", ", ".join([light.info['displayName'] for light in room.lights]))
+    while True:
+        if not timers:
+            raise ValueError("Timer list is empty")
 
-    try:
-        while True:
-            assert timers, "Timer list is empty"
+        room.cleanup_inactive_services()
 
-            for timer in timers:
-                if timer.check_timer():
-                    transition_scene, end_scene = timer.get_transition()
-                    if not room.room_transition(
-                            transition_scene,
-                            end_scene=end_scene):
-                        # run it again with the new lights
-                        room.room_transition(
-                            transition_scene,
-                            end_scene=end_scene)
-                        log(f"Timer {timer.get_activation_time()} failed - re-scanned and ran timer again", MODE, LOG_FILE)
-                        log("New lights:", MODE, LOG_FILE)
-                        light_names = ", ".join(
-                            [light.info['displayName'] for light in room.lights])
-                        log(light_names, MODE, LOG_FILE)
+        for timer in timers:
+            if timer.check_timer():
+                transition_scene, end_scene = timer.get_transition()
+                room.room_transition_threaded(
+                    transition_scene,
+                    end_scene=end_scene)
+                logger.info("\t%s - Activated", timer.get_activation_time())
 
-                    # timer.activated = True
-                    log(f"\t{timer.get_activation_time()} - Activated",
-                        MODE, LOG_FILE)
-
-            sleep(60)
-            # check for any new timers only if the timer file has changed
-            new_hash = check_file(TIMER_FILE, current_hash, MODE, LOG_FILE)
-            if current_hash != new_hash:
-                timers = get_timers(TIMER_FILE)
-                current_hash = new_hash
-                times = ",".join([str(t.get_activation_time()) for t in timers])
-                log(f"timers: {times}", MODE, LOG_FILE)
-            # and repeat the process
-    except Exception as e:
-        log("Caught exception:", MODE, LOG_FILE)
-        log(str(e), MODE, LOG_FILE)
-        log("Exiting program...", MODE, LOG_FILE)
-        sys.exit(1)
+        sleep(60)
+        # check for any new timers only if the timer file has changed
+        new_hash = check_file(TIMER_FILE, current_hash)
+        if current_hash != new_hash:
+            timers = get_timers(TIMER_FILE)
+            current_hash = new_hash
+            times = ",".join([str(t.get_activation_time()) for t in timers])
+            logger.info("Timers: %s", times)
+        # and repeat the process
 
 
 if __name__ == "__main__":
+    #asyncio.run(main())
     main()

@@ -2,7 +2,26 @@
 """Timer class."""
 
 from datetime import datetime
-
+# TODO: fill in bitmasks
+MONTH_LENGTH = {
+    "january": 31,
+    "feburary": 28,
+    "feburary-leap": 29,
+    "march": 31,
+    "april": 30,
+    "may": 31,
+    "june": 30,
+    "july": 31,
+    "august": 31,
+    "september": 30,
+    "october": 31,
+    "november": 30,
+    "december": 31
+}
+WEEKDAYS = {
+    "monday", "tuesday", "wednesday", "thursday",
+    "friday", "saturday", "sunday"
+}
 
 def generate_month_mask(
                         active_month: str, leap: bool = False) -> int:
@@ -118,6 +137,8 @@ def parse_rules(rules: list,
     PROBLEM: calendar does not start on same day, each month is a different length, etc
 
     this method is recursive
+
+    replace this with theory implementation found in parse_rules.py
     """
     if len(rules) <= 1:
         return rules[0]
@@ -214,3 +235,7 @@ class Timer:
     def is_activated(self):
         """Return bool if activated."""
         return self.activated
+    
+    def get_end_scene(self):
+        """Return the end scene."""
+        return self.end_scene

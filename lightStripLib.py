@@ -8,37 +8,64 @@ import requests
 import socket
 import json
 from time import sleep, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 NUM_PORTS = 65536
 ELGATO_PORT = 9123
 
 
-class ServiceListener:
-    """Listener for Zeroconf."""
+import logging
 
-    def __init__(self):
-        """Init the listener."""
-        self.services = []
+from zeroconf import ServiceListener
+# TODO: fix bug where listener crashes when a light is removed
+class LightServiceListener(ServiceListener):
+    """
+    Listener for Zeroconf to keep track of active lights.
+    Abusing passing by reference to keep track of active lights.
+    """
 
-    def get_services(self):
-        """Return the services."""
-        return self.services
+    def __init__(self, light_dict: dict):
+        """Initialize the listener."""
+        self.log = logging.getLogger(__name__)
+        self.log.info("Initializing LightServiceListener")
+        self.light_dict = light_dict
 
     def remove_service(self, zeroconf, type, name):
-        """Remove a service."""
-        info = zeroconf.get_service_info(type, name)
-        self.services.remove(info)
+        """
+        Remove a service.
+        
+        Of course, the default timeout for this (when something is unplugged)
+        is an hour
+        TODO: change that timeout
+
+        Right now, I am just deleting the light from the service dict in
+        Room.check_for_new_lights()
+        """
+        if name in self.light_dict:
+            try:
+                del self.light_dict[name]
+                self.log.critical(f"Removed light service: {name}")
+            except Exception as e:
+                self.log.error(f"Failed to remove light service: {e}")
 
     def update_service(self, zeroconf, type, name):
         """Update a service."""
-        # print("update was called")
-        # info = zeroconf.get_service_info(type, name)
-        # index = self.services.index(info)
-        # self.services[index] =
+        info = zeroconf.get_service_info(type, name)
+        if info:
+            self.light_dict[name] = info
+            self.log.critical(f"Updated light service: {name}")
 
     def add_service(self, zeroconf, type, name):
         """Add a service to the list."""
         info = zeroconf.get_service_info(type, name)
-        self.services.append(info)
+        if info:
+            self.light_dict[name] = info
+            self.log.critical(f"Added light service: {name}")
+
+    def get_active_lights(self):
+        """Return the active lights."""
+        self.log.info(f"Returning active lights: {self.light_dict}")
+        return self.light_dict
 
 
 class Scene:
@@ -61,9 +88,12 @@ class Scene:
 
     def __init__(self, input_scene=[]):
         """Init the scene."""
+        self.log = logging.getLogger(__name__)
         for item in input_scene:
-            assert type(item) is dict, f"TypeError: item: {item} is type: {type(item)} not type: dict"
-        self.data = input_scene
+            if not isinstance(item, dict):
+                self.log.warning(f"TypeError: item: {item} is type: {type(item)} not type: dict")
+                raise ValueError(f"Input scene item must be a dictionary, got {type(item)}")
+        self.data = [] if not input_scene else input_scene.copy()
 
     def add_scene(self, hue, saturation, brightness, durationMs, transitionMs):
         """Add an item to the end of the list."""
@@ -97,7 +127,7 @@ class Scene:
     def print_scenes(self):
         """Display every scene in the loop."""
         for scene in self.data:
-            print(scene)
+            self.log.info(scene)
 
     def length(self):
         """Return the duration of the scene."""
@@ -155,7 +185,11 @@ class LightStrip:
     """
 
     def __init__(self, addr, port, name=""):
+        
         """Initialize the light."""
+        # Configure logging
+        self.log = logging.getLogger(__name__)
+        self.log.info(f"Initializing LightStrip with address: {addr}:{port}")
         self.addr = addr
         self.port = port
         self.name = name
@@ -170,77 +204,6 @@ class LightStrip:
         elif 'name' in self.data['lights'][0]:
             self.is_scene = True
 
-    def find_light_strips_zeroconf(service_type='_elg._tcp.local.', TIMEOUT=15):
-        """
-        Use multicast to find all elgato light strips.
-
-            Parameters:
-                the service type to search
-                the timeout period to wait until you stop searching
-        """
-        # NOTE: need to put this in a try/except statement
-        # just in case they have not imported zeroconf
-        try:
-            import zeroconf
-        except Exception:
-            print("please install zeroconf to use this method")
-            print("$ pip install zeroconf")
-            return []
-
-        lightstrips = []
-
-        zc = zeroconf.Zeroconf()
-        listener = ServiceListener()
-        browser = zeroconf.ServiceBrowser(zc, service_type, listener)
-        sleep(TIMEOUT)      # this is not a rolling admission... I could rework it to be that way, and it might be smarter to do that
-        browser.cancel()    # however right now this works just fine. In theory it will lose connection to the lights if they get assigned to a new IP
-                            # but in that case I am going to assume it is because the network bounces, which means this function will get called again anyways
-        # print("Lights:")
-        for service in listener.get_services():
-            for addr in service.addresses:
-                try:
-                    prospect_light = LightStrip(socket.inet_ntoa(addr), service.port, service.get_name())
-                    # TODO add support for Key Lights
-                    if 'Strip' in prospect_light.info['productName']:
-                        # print(f"\tadding light strip: {prospect_light.info['displayName']}")
-                        lightstrips.append(prospect_light)
-                except Exception:
-                    pass
-                    # print("Failed to connect to light")
-
-        return lightstrips
-
-    def start_rolling_admission_zeroconf(
-            zeroconf, service_type='_elg._tcp.local.'):
-        """Start a rolling admission for Zeroconf."""
-        # TODO: write this method
-
-    def find_light_strips_manual(strips) -> list:
-        """TODO: write this method."""
-        # oof we have to do it the hardcore way or just give up...
-        lightstrips = []
-        for (addr, port) in strips:
-            lightstrips.append(LightStrip(addr, port))
-        return lightstrips
-
-    def __is_socket_open(tup):
-        addr, port = tup
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
-        try:
-            r = sock.connect_ex((addr, port))
-            if r == 0:
-                print("port:", port, "was open")
-                return port
-            else:
-                return 0
-        except Exception:
-            pass
-
-    def __check_all_ports(self, num_ports):
-        for port in range(num_ports):
-            yield LightStrip.__is_socket_open((self.addr, self.port))
-
     def get_strip_data(self):
         """
         Send a get request to the full addr.
@@ -249,21 +212,21 @@ class LightStrip:
             http://<IP>:<port>/elgato/lights
         """
         self.data = requests.get(
-            'http://' + self.full_addr + '/elgato/lights',
+            f'http://{self.full_addr}/elgato/lights',
             verify=False).json()
         return self.data
 
     def get_strip_info(self):
         """Send a get request to the light."""
         self.info = requests.get(
-            'http://' + self.full_addr + '/elgato/accessory-info',
+            f'http://{self.full_addr}/elgato/accessory-info',
             verify=False).json()
         return self.info
 
     def get_strip_settings(self):
         """Get the strip's settings."""
         self.settings = requests.get(
-            'http://' + self.full_addr + '/elgato/lights/settings',
+            f'http://{self.full_addr}/elgato/lights/settings',
             verify=False).json()
         return self.settings
 
@@ -291,8 +254,8 @@ class LightStrip:
         Returns True if successful
         TODO: investigate if sending the entire JSON is necessary or if we can just send the things that need to be changed
         """
-        # print("attempting message:")
-        # print(json.dumps(new_data))
+        # self.log.debug("attempting message:")
+        # self.log.debug(json.dumps(new_data))
         try:
             r = requests.put(
                 'http://' + self.full_addr + '/elgato/lights',
@@ -301,10 +264,10 @@ class LightStrip:
             if r.status_code == requests.codes.ok:
                 self.data = r.json()
                 return True
-            # print("attempted message:")
-            # print(json.dumps(new_data))
-            # print("response:")
-            print(r.text)
+            # self.log.debug("attempted message:")
+            # self.log.debug(json.dumps(new_data))
+            # self.log.debug("response:")
+            self.log.debug(r.text)
         except Exception:
             pass
         return False
@@ -319,7 +282,7 @@ class LightStrip:
             r = requests.put(
                 'http://' + self.full_addr + '/elgato/lights/settings',
                 data=json.dumps(new_data))
-            print(r.text)
+            self.log.debug(r.text)
             if r.status_code == requests.codes.ok:
                 self.settings = new_data
                 return True
@@ -336,7 +299,7 @@ class LightStrip:
             if r.status_code == requests.codes.ok:
                 self.info = new_data
                 return True
-            print(r.text)
+            self.log.debug(r.text)
         except Exception:
             pass
         return False
@@ -359,24 +322,24 @@ class LightStrip:
                           scene_id="",
                           brightness: float = 100.0):
         """Update just the scene data."""
-        print("updating scene data")
+        self.log.info("updating scene data")
         if not self.is_scene:
-            print("light strip is not currently assigned to a scene, autogenerating")
+            self.log.info("light strip is not currently assigned to a scene, autogenerating")
             self.make_scene(scene_name, scene_id)
 
         if not scene:
-            print("assigining scene by name")
+            self.log.info("assigining scene by name")
             self.data['lights'][0]['name'] = scene_name
             if scene_id:
-                print("also assigining scene by id")
+                self.log.info("also assigining scene by id")
                 self.data['lights'][0]['id'] = scene_id
-            print("purging scene data")
+            self.log.info("purging scene data")
             if not self.data['lights'][0].pop('scene'):
-                print("scene was not specified")
+                self.log.info("scene was not specified")
             if not self.data['lights'][0].pop('numberOfSceneElements'):
-                print("number of scene elements was not specified")
+                self.log.info("number of scene elements was not specified")
         else:
-            print("scene:", scene)
+            self.log.info(f"scene: {scene}")
             assert type(scene) is Scene, "scene is not a list"
             self.data['lights'][0]['scene'] = scene.data
             self.data['lights'][0]['numberOfSceneElements'] = len(scene.data)
@@ -386,7 +349,7 @@ class LightStrip:
                    scene_id: str,
                    brightness: float = 100.0):
         """Create a scene."""
-        # print("making the light a scene")
+        # self.log.debug("making the light a scene")
         self.data = {
             'numberOfLights': 1,
             'lights': [
@@ -407,7 +370,7 @@ class LightStrip:
     def transition_start(self,
                          colors: list,
                          name='transition-scene',
-                         scene_id='transition-scene-id') -> tuple[int, bool]:
+                         scene_id='transition-scene-id') -> int:
         """
         Non-blocking for running multiple scenes.
 
@@ -419,7 +382,7 @@ class LightStrip:
 
         TODO: see if you can pick a different way to cycle between colors in a scene
         """
-        # print("---------transition starting")
+        # self.log.debug("---------transition starting")
         self.make_scene(name, scene_id, 100)
         wait_time_ms = 0
         # check if the light has already been set to a color,
@@ -447,7 +410,10 @@ class LightStrip:
         self.update_scene_data(self.scene, scene_name=name, scene_id=scene_id)
         self.set_strip_data(self.data)
         # return the wait time
-        return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
+        if len(colors) > 1:
+            return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
+        else:
+            return wait_time_ms / 1000  # Return full wait time for single-color scenes
 
     def transition_end(self,
                        end_scene: list,
@@ -460,22 +426,22 @@ class LightStrip:
         sets the scene to the end_color
         almost identical to lightStrip.update_color - primarily used to keep code readable
         """
-        # print("--------transition ending")
+        # self.log.debug("--------transition ending")
         assert type(end_scene) is list, f"TypeError: {end_scene} is type: {type(end_scene)} not type: list"
-        # print("scene passed into transition_end:", end_scene)
+        # self.log.debug(f"scene passed into transition_end: {end_scene}")
         if not end_scene:  # TODO: make this cleaner
-            # print("missing end scene, using scene name")
+            # self.log.debug("missing end scene, using scene name")
             self.update_scene_data(None, scene_name=end_scene_name, scene_id=end_scene_id)
             return self.set_strip_data(self.data)
         elif len(end_scene) == 1:
-            # print("setting light to single color")
+            # self.log.debug("setting light to single color")
             hue, saturation, brightness, _, _ = end_scene[0]
             is_on = 1 if brightness > 0 else 0
             return self.update_color(is_on, hue, saturation, brightness)
         else:
             # the end scene is an actual scene
             # TODO: make scene brightness variable
-            # print("setting transition to end on a scene")
+            # self.log.debug("setting transition to end on a scene")
             self.make_scene(end_scene_name, end_scene_id, 100)
             self.scene = Scene([])
             for item in end_scene:
@@ -490,15 +456,107 @@ class LightStrip:
 class Room:
     """Collection of lights that are on the same network."""
 
-    def __init__(self, lights: list = []):
+    def __init__(self, lights: list|None = None):
         """Init the room."""
-        assert type(lights) is list, f"TypeError: {lights} is type: {type(lights)} not type: list"
-        self.lights = lights
+        if lights is None:
+            lights = []
+        if not isinstance(lights, list):
+            raise ValueError(f"TypeError: {lights} is type: {type(lights)} not type: list")
+        self.lights: list[LightStrip] = lights
+        self.service_dict = dict()
+        self.log = logging.getLogger(__name__)
+    
+    def find_light_strips_zeroconf(service_type='_elg._tcp.local.', TIMEOUT=15):
+        """
+        Use multicast to find all elgato light strips.
 
-    def setup(self, service_type='_elg._tcp.local.', timeout=15):
+            Parameters:
+                the service type to search
+                the timeout period to wait until you stop searching
+        """
+        # NOTE: need to put this in a try/except statement
+        # just in case they have not imported zeroconf
+        try:
+            import zeroconf
+        except ImportError:
+            raise ImportError("Please install zeroconf to use this method. You can install it using: pip install zeroconf")
+
+        lightstrips = []
+
+        zc = zeroconf.Zeroconf()
+        service_dict = dict()
+        listener = LightServiceListener(service_dict)
+        browser = zeroconf.ServiceBrowser(zc, service_type, listener)
+        sleep(TIMEOUT)
+        browser.cancel()
+        new_lights = []
+        for name, info in listener.get_active_lights().items():
+            for addr in info.addresses:
+                try:
+                    prospect_light = LightStrip(socket.inet_ntoa(addr), info.port, name)
+                    if 'Strip' in prospect_light.info['productName']:
+                        new_lights.append(prospect_light)
+                        logging.getLogger(__name__).info(f"Found new light strip: {prospect_light.info['displayName']}")
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to connect to light: {e}")
+        return new_lights
+        
+
+    def start_rolling_admission_zeroconf( 
+            self, service_type='_elg._tcp.local.', timeout=15):
+        """Start a rolling admission for Zeroconf."""
+        try:
+            import zeroconf
+        except ImportError:
+            raise ImportError("Please install zeroconf to use this method. You can install it using: pip install zeroconf")
+
+        self.log.info("Starting rolling admission for Zeroconf")
+        self.zeroconf = zeroconf.Zeroconf()
+        self.service_type = service_type
+        self.listener = LightServiceListener(self.service_dict)
+        self.browser = zeroconf.ServiceBrowser(self.zeroconf, self.service_type, self.listener)
+        sleep(timeout)
+
+    def stop_rolling_admission_zeroconf(self):
+        """Stop the rolling admission for Zeroconf."""
+        if hasattr(self, 'browser'):
+            self.browser.cancel()
+            self.zeroconf.close()
+            self.log.info("Stopped rolling admission for Zeroconf")
+        else:
+            self.log.warning("No active rolling admission to stop")
+
+    def check_for_new_lights(self):
+        """Check for new lights and add them to the list."""
+        new_lights = []
+        self.log.info("Checking for new lights")
+        for name, info in self.service_dict.items():
+            for addr in info.addresses:
+                try:
+                    prospect_light = LightStrip(socket.inet_ntoa(addr), info.port, name)
+                    if 'Strip' in prospect_light.info['productName']:
+                        new_lights.append(prospect_light)
+                        self.log.info(f"Found new light strip: {prospect_light.info['displayName']}")
+                except Exception as e:
+                    self.log.error(f"Failed to connect to light: {e}")
+        self.lights = new_lights
+        return True
+
+    def cleanup_inactive_services(self):
+        """Remove inactive services from the list of lights."""
+        active_lights = set(self.service_dict.keys())
+        # if we have new lights, add them to self.lights
+        if active_lights - set(light.name for light in self.lights):
+            self.log.info("Found new lights, checking for them")
+            self.check_for_new_lights()
+        self.log.info("Cleaning up inactive services %s", set(light.name for light in self.lights if light.name not in active_lights))
+        self.lights = [light for light in self.lights if light.name in active_lights]
+
+    def setup(self, service_type='_elg._tcp.local.'):
         """Find all the lights."""
-        self.lights = LightStrip.find_light_strips_zeroconf(
-            service_type, timeout)
+        self.log.info("Setting up room")
+        self.start_rolling_admission_zeroconf(service_type=service_type)
+        self.check_for_new_lights()
         return True if self.lights else False
 
     def room_color(self, on, hue, saturation, brightness):
@@ -506,9 +564,54 @@ class Room:
         for light in self.lights:
             light.update_color(on, hue, saturation, brightness)
 
-    def room_scene(self, scene):
-        """Set all lights in the room to a specific scene."""
-        # TODO: write this method
+    def room_scene(self, scene: Scene):
+        """Set all lights in the room to a specific scene using a thread pool."""
+        def update_light_scene(light: LightStrip):
+            light.update_scene_data(scene.copy())
+            return light.set_strip_data(light.data)
+        
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(update_light_scene, light) for light in self.lights]
+            
+            results = []
+            for future in as_completed(futures):
+                results.append(future.result())
+        
+        # Check if all updates were successful
+        return all(results)
+    
+    def room_transition_threaded(self,
+                                 colors: list,
+                                 name='transition-scene',
+                                 scene_id='transition-scene-id',
+                                 end_scene: list = [],
+                                 end_scene_name="end-scene",
+                                 end_scene_id="end-scene-id") -> tuple[str]:
+        """
+        Non-blocking transition for all room lights using a thread pool.
+
+        Returns tuple of successful names
+        """
+        if not colors:
+            self.log.warning("Cannot transition an empty scene")
+            return False
+
+        def process_light_transition(light: LightStrip):
+            assert type(light) is LightStrip, f"TypeError: {light} is type: {type(light)} not type: LightStrip"
+            sleep_time = light.transition_start(colors.copy(), name, scene_id)
+            self.log.info(f"Sleep time: {sleep_time}")
+            sleep(sleep_time)
+            transition_status = light.transition_end(end_scene, end_scene_name, end_scene_id)
+            return transition_status
+
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_light_transition, light) for light in self.lights]
+            
+            results = []
+            for future in as_completed(futures):
+                results.append(future.result())
+        successful_lights = [light.name for light, result in zip(self.lights, results) if result]
+        return tuple(successful_lights)
 
     def room_transition(self,
                         colors: list,
@@ -524,7 +627,7 @@ class Room:
         """
         rescan = False
         if not colors:
-            # print("cannot transition an empty scene")
+            self.log.warning("cannot transition an empty scene")
             return
 
         times = []
@@ -533,24 +636,23 @@ class Room:
                 light,
                 light.transition_start(colors, name, scene_id),
                 time()))
-
         while times:
             # TODO: check if this can be optimized to use less
             light, sleep_time, start_time = times.pop(0)
-            # light, transition_start_output, start_time = times.pop(0)
-            # print(transition_start_output)
-            # sleep_time, success = transition_start_output
+            self.log.debug(f"Processing light: {light}, sleep_time: {sleep_time}, start_time: {start_time}")
+            
             if sleep_time + start_time < time():
                 transition_status = light.transition_end(
                     end_scene, end_scene_name, end_scene_id)
-                # print("transition status: ", transition_status)
+                self.log.info(f"Transition status: {transition_status}")
                 rescan = rescan or not transition_status
-                # print(rescan)
+                self.log.debug(f"Rescan status: {rescan}")
             else:
                 times.append((light, sleep_time, start_time))
+        
         if rescan:
-            # print("rescanning because a light failed")
-            self.setup()
+            self.log.warning("A light failed to transition, rescan recommended")
+            #self.setup()
         return not rescan
 
     def light_transition(self,
@@ -564,7 +666,7 @@ class Room:
         """Non blocking transition for specific light in the room."""
         rescan = False
         if not colors:
-            # print("cannot transition an empty scene")
+            self.log.warning("cannot transition an empty scene")
             return
         if not end_scene:
             end_scene = colors[-1]
@@ -586,6 +688,4 @@ class Room:
                 times.append((light, sleep_time, start_time))
 
         return
-        if rescan:
-            # print("rescanning because a light failed")
-            self.setup()
+
