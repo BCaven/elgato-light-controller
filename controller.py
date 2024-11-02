@@ -156,7 +156,7 @@ def parse_args():
                 logger.error("Failed to parse arguments")
                 usage(1)
         elif arg == '-q':
-            logger.setLevel(logging.ERROR)
+            logging.getLogger().setLevel(logging.ERROR)
         elif arg == '-t':
             try:
                 TIMER_FILE = arguments.pop(0)
@@ -178,14 +178,15 @@ def main():
     """
     Run the main driver for program.
 
-    TODO: make this survive a network failure or change in IP addr
     TODO: script that checks for updates to the main branch and relaunches the controller
     """
     LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS = parse_args()
     
     # Set up file handler for logging
+    logging.getLogger().setLevel(logging.INFO)
+
     file_handler = logging.FileHandler(LOG_FILE)
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     logging.getLogger().addHandler(file_handler)
@@ -193,7 +194,6 @@ def main():
     console.setLevel(logging.DEBUG)
     console.setFormatter(formatter)
     logging.getLogger().addHandler(console)
-    logging.getLogger().setLevel(logging.DEBUG)
 
     # get hash
     current_hash = check_file(TIMER_FILE, "")
@@ -233,5 +233,4 @@ def main():
 
 
 if __name__ == "__main__":
-    #asyncio.run(main())
     main()
