@@ -143,6 +143,7 @@ def parse_args():
     LOG_FILE = "controller.log"
     TIMER_FILE = "light.transition"
     EXPECTED_NUM_LIGHTS = 3
+    QUIET = False
     # parse args
     arguments = sys.argv[1:]
     while arguments:
@@ -157,6 +158,7 @@ def parse_args():
                 usage(1)
         elif arg == '-q':
             logging.getLogger().setLevel(logging.ERROR)
+            QUIET = True
         elif arg == '-t':
             try:
                 TIMER_FILE = arguments.pop(0)
@@ -172,7 +174,7 @@ def parse_args():
         else:
             usage(1)
 
-    return (LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS)
+    return (LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS, QUIET)
 
 def main():
     """
@@ -180,18 +182,17 @@ def main():
 
     TODO: script that checks for updates to the main branch and relaunches the controller
     """
-    LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS = parse_args()
-    
     # Set up file handler for logging
-    logging.getLogger().setLevel(logging.INFO)
 
+    LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS, QUIET = parse_args()
+    
+    if QUIET:
+        logging.disable()
     file_handler = logging.FileHandler(LOG_FILE)
-    file_handler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     logging.getLogger().addHandler(file_handler)
     console = logging.StreamHandler()
-    console.setLevel(logging.DEBUG)
     console.setFormatter(formatter)
     logging.getLogger().addHandler(console)
 
