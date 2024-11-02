@@ -549,8 +549,10 @@ class Room:
         if active_lights - set(light.name for light in self.lights):
             self.log.info("Found new lights, checking for them")
             self.check_for_new_lights()
-        self.log.info("Cleaning up inactive services %s", set(light.name for light in self.lights if light.name not in active_lights))
-        self.lights = [light for light in self.lights if light.name in active_lights]
+        inactive_lights = set(light.name for light in self.lights if light.name not in active_lights)
+        if inactive_lights: 
+            self.log.info("Cleaning up inactive services %s", inactive_lights)
+            self.lights = [light for light in self.lights if light.name in active_lights]
 
     def setup(self, service_type='_elg._tcp.local.'):
         """Find all the lights."""
