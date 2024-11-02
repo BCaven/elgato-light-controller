@@ -156,7 +156,7 @@ def parse_args():
                 logger.error("Failed to parse arguments")
                 usage(1)
         elif arg == '-q':
-            logging.getLogger().setLevel(logging.ERROR)
+            logging.disable()
         elif arg == '-t':
             try:
                 TIMER_FILE = arguments.pop(0)
@@ -180,18 +180,15 @@ def main():
 
     TODO: script that checks for updates to the main branch and relaunches the controller
     """
+    # Set up file handler for logging
+
     LOG_FILE, TIMER_FILE, EXPECTED_NUM_LIGHTS = parse_args()
     
-    # Set up file handler for logging
-    logging.getLogger().setLevel(logging.INFO)
-
     file_handler = logging.FileHandler(LOG_FILE)
-    file_handler.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     logging.getLogger().addHandler(file_handler)
     console = logging.StreamHandler()
-    console.setLevel(logging.DEBUG)
     console.setFormatter(formatter)
     logging.getLogger().addHandler(console)
 
