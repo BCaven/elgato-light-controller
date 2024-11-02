@@ -458,7 +458,7 @@ class Room:
 
     def __init__(self, lights: list|None = None):
         """Init the room."""
-        if lights is None:
+        if not lights:
             lights = []
         if not isinstance(lights, list):
             raise ValueError(f"TypeError: {lights} is type: {type(lights)} not type: list")
@@ -480,9 +480,7 @@ class Room:
             import zeroconf
         except ImportError:
             raise ImportError("Please install zeroconf to use this method. You can install it using: pip install zeroconf")
-
-        lightstrips = []
-
+    
         zc = zeroconf.Zeroconf()
         service_dict = dict()
         listener = LightServiceListener(service_dict)
@@ -526,6 +524,19 @@ class Room:
         else:
             self.log.warning("No active rolling admission to stop")
 
+    def add_a_new_light(self, name: str, info):
+        """Add a new light to the list."""
+        new_lights = []
+        for addr in info.addresses:
+            try:
+                prospect_light = LightStrip(socket.inet_ntoa(addr), info.port, name)
+                if 'Strip' in prospect_light.info['productName']:
+                    new_lights.append(prospect_light)
+                    self.log.info(f"Found new light strip: {prospect_light.info['displayName']}")
+            except Exception as e:
+                self.log.debug(f"Failed to connect to light... skipping\n{e}")
+        self.lights.extend(new_lights)
+
     def check_for_new_lights(self):
         """Check for new lights and add them to the list."""
         new_lights = []
@@ -538,7 +549,7 @@ class Room:
                         new_lights.append(prospect_light)
                         self.log.info(f"Found new light strip: {prospect_light.info['displayName']}")
                 except Exception as e:
-                    self.log.error(f"Failed to connect to light: {e}")
+                    self.log.debug(f"Failed to connect to light... skipping\n{e}")
         self.lights = new_lights
         return True
 
@@ -548,7 +559,8 @@ class Room:
         # if we have new lights, add them to self.lights
         if active_lights - set(light.name for light in self.lights):
             self.log.info("Found new lights, checking for them")
-            self.check_for_new_lights()
+            for name in active_lights - set(light.name for light in self.lights):
+                self.add_a_new_light(name, self.service_dict[name])
         inactive_lights = set(light.name for light in self.lights if light.name not in active_lights)
         if inactive_lights: 
             self.log.info("Cleaning up inactive services %s", inactive_lights)
