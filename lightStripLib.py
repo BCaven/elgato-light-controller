@@ -456,7 +456,7 @@ class LightStrip:
 class Room:
     """Collection of lights that are on the same network."""
 
-    def __init__(self, lights: list):
+    def __init__(self, lights: list=[]):
         """Init the room."""
         if not lights:
             lights = []
