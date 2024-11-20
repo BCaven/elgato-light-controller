@@ -410,10 +410,8 @@ class LightStrip:
         self.update_scene_data(self.scene, scene_name=name, scene_id=scene_id)
         self.set_strip_data(self.data)
         # return the wait time
-        if len(colors) > 1:
-            return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
-        else:
-            return wait_time_ms / 1000  # Return full wait time for single-color scenes
+        return (wait_time_ms - colors[-1][3] - colors[-1][4]) / 1000
+        
 
     def transition_end(self,
                        end_scene: list,
