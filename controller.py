@@ -67,7 +67,13 @@ def get_timers(timer_file):
 
     with open(timer_file, 'r') as timer_file:
         for raw_timer in timer_file:
-            raw_input = raw_timer.split(',')
+            # first split it looking for comments and removing everything after the comment
+            # comments are the same as single line comments in python
+            remove_comments = raw_timer.split("#")[0]
+            if not remove_comments:
+                # skip the line if it was all comments
+                continue
+            raw_input = remove_comments.split(',')
             # first thing: year range
             raw_year = raw_input.pop(0)
 
