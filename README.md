@@ -6,6 +6,8 @@ Controller for elgato light strips
 
 The controller reads a list of timers and executes them at the specified time
 
+> Fun fact: this library has been in continuous operation since December 2023.
+
 ## Features:
 
 - Timers
