@@ -4,7 +4,7 @@
 
 Controller for elgato light strips
 
-The controller reads a list of timers and executes them at the specified time
+The controller reads a list of timers and executes them at the specified time.
 
 > Fun fact: this library has been in continuous operation since December 2023.
 
@@ -12,6 +12,7 @@ The controller reads a list of timers and executes them at the specified time
 
 - Timers
 - Transitions
+- Automatic detection of lights entering and leaving the network
 
 ## The controller:
 
